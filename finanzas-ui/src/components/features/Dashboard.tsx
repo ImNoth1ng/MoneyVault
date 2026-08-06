@@ -33,9 +33,9 @@ export const Dashboard = () => {
     );
   }
 
-  // 1. DÉBITO Y LIQUIDEZ
-  const debitAccounts = accounts.filter((a) => a.type === 'DEBIT' && a.active !== false);
-  const totalLiquidityDebit = debitAccounts.reduce((sum, a) => sum + parseFloat(String(a.currentBalance || 0)), 0);
+  // 1. DÉBITO, EFECTIVO Y LIQUIDEZ TOTAL
+  const liquidityAccounts = accounts.filter((a) => (a.type === 'DEBIT' || a.type === 'CASH') && a.active !== false);
+  const totalLiquidityDebit = liquidityAccounts.reduce((sum, a) => sum + parseFloat(String(a.currentBalance || 0)), 0);
 
   // 2. TARJETAS DE CRÉDITO
   const creditAccounts = accounts.filter((a) => (a.type === 'CREDIT' || String(a.type) === 'CREDIT_CARD') && a.active !== false);
@@ -176,7 +176,7 @@ export const Dashboard = () => {
             </h2>
 
             <p className="text-xs font-semibold text-slate-300 max-w-xl">
-              Es el dinero líquido neto real que te queda libre después de restar tus deudas en Tarjetas de Crédito ({formatCurrency(creditDebtTotal)}) de tu dinero total en Débito ({formatCurrency(totalLiquidityDebit)}).
+              Es el dinero líquido neto real que te queda libre después de restar tus deudas en Tarjetas de Crédito ({formatCurrency(creditDebtTotal)}) de tu dinero total en Liquidez ({formatCurrency(totalLiquidityDebit)}).
             </p>
 
             <div
@@ -250,7 +250,7 @@ export const Dashboard = () => {
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-emerald-400">Dinero Total en Liquidez</p>
             <p className="text-2xl font-black text-white mt-1">{formatCurrency(totalLiquidityDebit)}</p>
-            <p className="text-[10px] text-slate-400 mt-1 font-semibold">{debitAccounts.length} cuenta(s) de débito</p>
+            <p className="text-[10px] text-slate-400 mt-1 font-semibold">{liquidityAccounts.length} cuenta(s) en liquidez (débito y efectivo)</p>
           </div>
           <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-xl">
             <Banknote className="w-6 h-6" />
