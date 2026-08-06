@@ -41,7 +41,7 @@ export const SnapshotsPage = () => {
   const pendingTickets = tickets.filter((t) => !Boolean(t.isPaid || t.status === 'PAID'));
   const totalPendingTickets = pendingTickets.reduce((sum, t) => sum + parseFloat(String(t.totalAmount || 0)), 0);
 
-  const dineroLibre = (totalDebit + totalCash) - totalCreditDebt;
+  const dineroLibre = (totalDebit + totalCash + totalPendingTickets) - totalCreditDebt;
 
   // Filtrado de la lista de snapshots
   const sortedSnapshots = [...snapshots].sort(

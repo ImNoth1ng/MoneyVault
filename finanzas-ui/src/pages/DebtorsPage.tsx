@@ -343,6 +343,13 @@ export default function DebtorsPage() {
         </div>
         <div className="flex items-center gap-3">
           <button
+            onClick={() => handleOpenDebtorModal()}
+            className="px-3.5 py-2 bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+          >
+            <Users className="w-4 h-4 text-cyan-400" />
+            <span>Nuevo Deudor</span>
+          </button>
+          <button
             onClick={() => handleOpenRecurringModal()}
             className="px-3.5 py-2 bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
           >
@@ -640,6 +647,16 @@ export default function DebtorsPage() {
             </div>
           ) : (
             <div className="glass-card rounded-2xl border border-slate-800 overflow-hidden">
+              <div className="p-4 bg-slate-900/80 border-b border-slate-800 flex justify-between items-center">
+                <span className="text-xs font-bold text-slate-300">Deudores Registrados ({debtors.length})</span>
+                <button
+                  onClick={() => handleOpenDebtorModal()}
+                  className="px-3.5 py-1.5 bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Nuevo Deudor</span>
+                </button>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs text-left">
                   <thead className="bg-[#0b0f19] border-b border-slate-800 text-emerald-400 uppercase text-[10px] font-bold tracking-wider">

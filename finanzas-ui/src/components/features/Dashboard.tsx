@@ -52,8 +52,8 @@ export const Dashboard = () => {
   const investmentAccounts = accounts.filter((a) => a.type === 'INVESTMENT' && a.active !== false);
   const totalInvestmentBalance = investmentAccounts.reduce((sum, a) => sum + parseFloat(String(a.currentBalance || 0)), 0);
 
-  // 5. DINERO LIBRE
-  const dineroLibre = totalLiquidityDebit - creditDebtTotal;
+  // 5. DINERO LIBRE (Liquidez + Pendiente por Cobrar - Deudas Crédito)
+  const dineroLibre = (totalLiquidityDebit + totalPendingReceivable) - creditDebtTotal;
 
   // 6. SNAPSHOT ANALYSIS & SEMÁFORO LOGIC
   const sortedSnapshots = [...snapshots].sort((a: any, b: any) => 
@@ -176,7 +176,7 @@ export const Dashboard = () => {
             </h2>
 
             <p className="text-xs font-semibold text-slate-300 max-w-xl">
-              Es el dinero líquido neto real que te queda libre después de restar tus deudas en Tarjetas de Crédito ({formatCurrency(creditDebtTotal)}) de tu dinero total en Liquidez ({formatCurrency(totalLiquidityDebit)}).
+              Es el dinero disponible libre calculado sumando tu liquidez en Débito y Efectivo ({formatCurrency(totalLiquidityDebit)}) más lo pendiente por cobrar ({formatCurrency(totalPendingReceivable)}), menos tus deudas en Tarjetas de Crédito ({formatCurrency(creditDebtTotal)}).
             </p>
 
             <div
