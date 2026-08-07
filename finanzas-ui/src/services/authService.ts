@@ -1,6 +1,7 @@
 import apiClient from '../lib/apiClient';
 import {
   AuthResponse,
+  ChangePasswordRequest,
   LoginRequest,
   RegisterRequest,
   User,
@@ -29,6 +30,11 @@ export const authService = {
 
   register: async (payload: RegisterRequest): Promise<string> => {
     const { data } = await client.post('/auth/register', payload);
+    return data;
+  },
+
+  changePassword: async (payload: ChangePasswordRequest): Promise<string> => {
+    const { data } = await client.post('/auth/change-password', payload);
     return data;
   },
 

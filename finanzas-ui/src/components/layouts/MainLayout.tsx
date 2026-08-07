@@ -1,7 +1,8 @@
 import { ReactNode, useState } from 'react';
-import { Menu, X, LogOut, BarChart3, Wallet, Users, DollarSign, Camera, CreditCard, Banknote, TrendingUp } from 'lucide-react';
+import { Menu, X, LogOut, BarChart3, Wallet, Users, DollarSign, Camera, CreditCard, Banknote, TrendingUp, KeyRound } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { ChangePasswordModal } from '../features/ChangePasswordModal';
 
 interface NavItem {
   icon: ReactNode;
@@ -12,6 +13,7 @@ interface NavItem {
 
 export const MainLayout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
   const { user, logout } = useAuthStore();
   const location = useLocation();
   const navigate = useNavigate();
@@ -107,6 +109,14 @@ export const MainLayout = () => {
             </div>
           )}
           <button
+            onClick={() => setIsChangePasswordModalOpen(true)}
+            className="w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-slate-400 hover:text-emerald-400 hover:bg-slate-800/80 transition text-xs font-bold"
+            title="Cambiar contraseña"
+          >
+            <KeyRound className="w-4 h-4 text-emerald-400" />
+            {isSidebarOpen && <span>Cambiar contraseña</span>}
+          </button>
+          <button
             onClick={() => {
               logout();
               navigate('/login');
@@ -132,16 +142,25 @@ export const MainLayout = () => {
             <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">Control Financiero</span>
           </div>
         </div>
-        <button
-          onClick={() => {
-            logout();
-            navigate('/login');
-          }}
-          className="p-2 text-slate-400 hover:text-emerald-400 rounded-xl hover:bg-slate-800 transition"
-          title="Cerrar sesión"
-        >
-          <LogOut className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setIsChangePasswordModalOpen(true)}
+            className="p-2 text-slate-400 hover:text-emerald-400 rounded-xl hover:bg-slate-800 transition"
+            title="Cambiar contraseña"
+          >
+            <KeyRound className="w-4 h-4 text-emerald-400" />
+          </button>
+          <button
+            onClick={() => {
+              logout();
+              navigate('/login');
+            }}
+            className="p-2 text-slate-400 hover:text-emerald-400 rounded-xl hover:bg-slate-800 transition"
+            title="Cerrar sesión"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
       </header>
 
       {/* MAIN VIEW AREA */}
@@ -157,6 +176,14 @@ export const MainLayout = () => {
             <span className="text-xs font-bold tracking-wider text-slate-300 uppercase">Gestión de Cuentas y Deudas</span>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsChangePasswordModalOpen(true)}
+              className="text-xs font-bold px-3 py-1.5 bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-200 rounded-xl flex items-center gap-1.5 transition"
+              title="Cambiar contraseña"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Contraseña</span>
+            </button>
             <span className="text-xs font-bold px-3.5 py-1.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 rounded-full flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
               <span>{user?.username || 'Usuario Autenticado'}</span>
@@ -191,6 +218,12 @@ export const MainLayout = () => {
           );
         })}
       </nav>
+
+      {/* CHANGE PASSWORD MODAL */}
+      <ChangePasswordModal
+        isOpen={isChangePasswordModalOpen}
+        onClose={() => setIsChangePasswordModalOpen(false)}
+      />
     </div>
   );
 };

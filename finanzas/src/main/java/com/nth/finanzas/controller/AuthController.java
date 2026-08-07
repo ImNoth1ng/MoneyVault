@@ -2,12 +2,14 @@ package com.nth.finanzas.controller;
 
 import com.nth.finanzas.dto.AuthRequest;
 import com.nth.finanzas.dto.AuthResponse;
+import com.nth.finanzas.dto.ChangePasswordRequest;
 import com.nth.finanzas.dto.RegisterRequest;
 import com.nth.finanzas.model.Role;
 import com.nth.finanzas.model.User;
 import com.nth.finanzas.repository.RoleRepository;
 import com.nth.finanzas.repository.UserRepository;
 import com.nth.finanzas.service.JwtService;
+import com.nth.finanzas.util.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -117,5 +119,45 @@ public class AuthController {
         log.info("Login exitoso para username={} id={}", user.getUsername(), user.getId());
 
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/change-password")
+    @Operation(
+            summary = "Cambiar contraseña",
+            description = "Cambia la contraseña del usuario autenticado previa verificación de la contraseña actual.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Contraseña actualizada exitosamente"),
+            @ApiResponse(responseCode = "400", description = "La contraseña actual es incorrecta o los datos son inválidos"),
+            @ApiResponse(responseCode = "401", description = "Usuario no autenticado")
+    })
+    public ResponseEntity<?> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        Long userId;
+        try {
+            userId = SecurityUtil.getCurrentUserId();
+        } catch (Exception e) {
+            log.warn("Intento de cambio de contraseña sin autenticación válida");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Usuario no autenticado");
+        }
+
+        log.info("Intento de cambio de contraseña para userId={}", userId);
+
+        if (!request.getNewPassword().equals(request.getNewPasswordConfirm())) {
+            log.warn("Cambio de contraseña rechazado para userId={}: las nuevas contraseñas no coinciden", userId);
+            return ResponseEntity.badRequest().body("Las nuevas contraseñas no coinciden");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            log.warn("Cambio de contraseña rechazado para userId={}: contraseña actual incorrecta", userId);
+            return ResponseEntity.badRequest().body("La contraseña actual es incorrecta");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        log.info("Contraseña actualizada exitosamente para userId={}", userId);
+        return ResponseEntity.ok("Contraseña actualizada exitosamente");
     }
 }

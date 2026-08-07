@@ -67,6 +67,12 @@ export interface RegisterRequest {
   passwordConfirm: string;
 }
 
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+  newPasswordConfirm: string;
+}
+
 // Interfaces de cuentas
 export interface Account {
   id: string | number;
