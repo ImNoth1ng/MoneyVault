@@ -3,14 +3,19 @@ logs
 *.log
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+
+# Environment & Sensitive Files
+.env
+.env.local
+.env.*.local
+/context/
+/contex/
 
 node_modules
 dist
 dist-ssr
-*.local
 
 # Editor directories and files
 .vscode/*
