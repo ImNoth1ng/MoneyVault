@@ -1,29 +1,29 @@
-# 💰 MoneyVault - Sistema de Gestión Financiera Personal
+# MoneyVault - Sistema de Gestión Financiera Personal
 
 **MoneyVault** es una plataforma web completa de control de finanzas personales diseñada para gestionar liquidez real, cuentas de débito, efectivo, inversiones, deudores y tarjetas de crédito con seguimiento del límite ocupado en tiempo real.
 
 ---
 
-## 🌟 Características Principales
+## Características Principales
 
-- 📊 **Dashboard Financiero Inteligente**:
+- **Dashboard Financiero Inteligente**:
   - **Dinero Libre Disponible**: Cálculo en tiempo real de la liquidez real disponible post-deudas `(Débito + Efectivo + Por Cobrar - Deudas Crédito)`.
   - **Semáforo Financiero**: Comparación de disponibilidad financiera contra promedios de snapshots previos.
-- 💳 **Tarjetas de Crédito & Límite Ocupado**:
+- **Tarjetas de Crédito & Límite Ocupado**:
   - Seguimiento del crédito ocupado vs. el límite asignado con barra de progreso visual interactiva (`usedCredit / creditLimit`).
   - Distinción entre saldo deudor y saldo acreedor.
-- 💵 **Desglose de Efectivo**:
+- **Desglose de Efectivo**:
   - Calculadora integrada de billetes ($1000, $500, $200, $100, $50, $20) para auditoría de caja en efectivo.
-- 👥 **Módulo de Deudores y Tickets**:
+- **Módulo de Deudores y Tickets**:
   - Registro de deudores, desglose por conceptos/items y control de tickets pagados vs. pendientes.
-- 📸 **Snapshots Históricos**:
+- **Snapshots Históricos**:
   - Captura periódica (quincenal o mensual) de disponibilidad financiera para análisis de tendencias.
-- 🔒 **Seguridad y Autenticación**:
+- **Seguridad y Autenticación**:
   - Autenticación JWT Stateless con contraseñas encriptadas (BCrypt) y gestión de sesión segura.
 
 ---
 
-## 🛠 Stack Tecnológico
+## Stack Tecnológico
 
 ### Backend
 - **Java 17+** & **Spring Boot 3**
@@ -47,7 +47,7 @@
 
 ---
 
-## 🏛 Arquitectura y Estructura del Proyecto
+## Arquitectura y Estructura del Proyecto
 
 El repositorio está estructurado en un monorepo modular:
 
@@ -68,7 +68,7 @@ MoneyVault/
 
 ---
 
-## 🚀 Cómo Levantar la Aplicación
+## Cómo Levantar la Aplicación
 
 ### Opción 1: Con Docker Compose (Recomendado)
 
@@ -133,7 +133,7 @@ El frontend estará accesible en `http://localhost:5173`.
 
 ---
 
-## 📖 Documentación de la API REST
+## Documentación de la API REST
 
 Una vez ejecutado el backend, puedes explorar y probar todos los endpoints REST interactivos mediante Swagger UI en:
 
@@ -153,7 +153,7 @@ Endpoints principales:
 
 ---
 
-## 🔒 Variables de Entorno Recomendadas
+## Variables de Entorno Recomendadas
 
 | Variable | Descripción | Valor por Defecto |
 | :--- | :--- | :--- |
@@ -168,8 +168,8 @@ Endpoints principales:
 
 ---
 
-## 📄 Licencia y Autores
+## Licencia y Autores
 
-Desarrollado para el control financiero personal con arquitectura limpia y diseño state-of-the-art.
+Desarrollado para el control financiero personal con arquitectura limpia.
 
 **MoneyVault** © 2026 - Todos los derechos reservados.
