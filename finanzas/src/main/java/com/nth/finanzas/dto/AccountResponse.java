@@ -21,6 +21,8 @@ public class AccountResponse {
     private BigDecimal currentBalance;
     @Schema(description = "Límite de crédito", example = "15000.00", nullable = true)
     private BigDecimal creditLimit;
+    @Schema(description = "Crédito utilizado / deuda actual", example = "5000.00", nullable = true)
+    private BigDecimal usedCredit;
     @Schema(description = "Moneda usada", example = "MXN")
     private String currency;
     @Schema(description = "Cantidad de billetes de $1000", example = "5")

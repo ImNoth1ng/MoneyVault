@@ -45,6 +45,7 @@ export const AccountModal = ({
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
     reset,
   } = useForm<AccountFormData>({
@@ -58,6 +59,9 @@ export const AccountModal = ({
       active: true,
     },
   });
+
+  const selectedType = watch('type');
+  const isCreditType = selectedType === AccountType.CREDIT || String(selectedType) === 'CREDIT_CARD' || (account && (account.type === 'CREDIT' || String(account.type) === 'CREDIT_CARD'));
 
   useEffect(() => {
     if (account && (mode === 'edit_balance' || mode === 'edit_full')) {
@@ -88,7 +92,7 @@ export const AccountModal = ({
             {isBalanceMode ? (
               <>
                 <DollarSign className="w-5 h-5 text-emerald-400" />
-                <span>Actualizar Saldo de Cuenta</span>
+                <span>{isCreditType ? 'Actualizar Deuda en Tarjeta' : 'Actualizar Saldo de Cuenta'}</span>
               </>
             ) : isFullMode ? (
               <>
@@ -98,7 +102,7 @@ export const AccountModal = ({
             ) : (
               <>
                 <Wallet className="w-5 h-5 text-emerald-400" />
-                <span>Nueva Cuenta Bancaria</span>
+                <span>{isCreditType ? 'Nueva Tarjeta de Crédito' : 'Nueva Cuenta Bancaria'}</span>
               </>
             )}
           </h2>
@@ -141,7 +145,15 @@ export const AccountModal = ({
           )}
 
           <Input
-            label={isBalanceMode ? "Nuevo Saldo Actual *" : "Saldo Inicial / Actual *"}
+            label={
+              isCreditType
+                ? isBalanceMode
+                  ? "Nueva Deuda / Saldo Utilizado *"
+                  : "Deuda Actual / Saldo Utilizado *"
+                : isBalanceMode
+                ? "Nuevo Saldo Actual *"
+                : "Saldo Inicial / Actual *"
+            }
             type="number"
             placeholder="0.00"
             step="0.01"
@@ -149,9 +161,9 @@ export const AccountModal = ({
             {...register('currentBalance')}
           />
 
-          {(isCreateMode || isFullMode || (account && (account.type === 'CREDIT' || String(account.type) === 'CREDIT_CARD'))) && (
+          {(isCreditType || isCreateMode || isFullMode) && (
             <Input
-              label="Límite de Crédito (Opcional)"
+              label={isCreditType ? "Límite de Crédito *" : "Límite de Crédito (Opcional)"}
               type="number"
               placeholder="0.00"
               step="0.01"

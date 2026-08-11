@@ -160,6 +160,7 @@ public class AccountService {
                 .type(account.getType().toString())
                 .currentBalance(account.getCurrentBalance())
                 .creditLimit(account.getCreditLimit())
+                .usedCredit(account.getType() == Account.AccountType.CREDIT ? account.getCurrentBalance() : null)
                 .currency(account.getCurrency())
                 .b1000Count(account.getB1000Count())
                 .b500Count(account.getB500Count())

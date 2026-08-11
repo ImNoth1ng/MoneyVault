@@ -263,7 +263,8 @@ const AccountCard = ({ account, onEditBalance, onEditFull, onDelete, onOpenCashB
 
   const balance = parseFloat(String(account.currentBalance || 0));
   const creditLimit = account.creditLimit ? parseFloat(String(account.creditLimit)) : 0;
-  const usedCredit = account.usedCredit ? parseFloat(String(account.usedCredit)) : 0;
+  const isCredit = account.type === 'CREDIT' || String(account.type) === 'CREDIT_CARD';
+  const usedCredit = account.usedCredit !== undefined ? parseFloat(String(account.usedCredit)) : (isCredit ? balance : 0);
   const percentageUsed = creditLimit > 0 ? (usedCredit / creditLimit) * 100 : 0;
   const isCash = account.type === 'CASH';
 
@@ -324,22 +325,26 @@ const AccountCard = ({ account, onEditBalance, onEditFull, onDelete, onOpenCashB
 
         <div className="space-y-3">
           <div>
-            <p className="text-[11px] text-slate-400 uppercase font-bold tracking-wider">Saldo Actual</p>
-            <p className="text-2xl font-black text-white tracking-tight">{formatCurrency(balance)}</p>
+            <p className="text-[11px] text-slate-400 uppercase font-bold tracking-wider">
+              {isCredit ? 'Deuda Actual' : 'Saldo Actual'}
+            </p>
+            <p className={`text-2xl font-black tracking-tight ${isCredit && balance > 0 ? 'text-rose-400' : 'text-white'}`}>
+              {formatCurrency(balance)}
+            </p>
           </div>
 
-          {(account.type === 'CREDIT' || String(account.type) === 'CREDIT_CARD') && creditLimit > 0 && (
+          {isCredit && creditLimit > 0 && (
             <div>
               <div className="flex justify-between items-center mb-1 text-xs">
-                <span className="text-slate-400 font-medium">Límite ocupado</span>
+                <span className="text-slate-400 font-medium">Límite ocupado ({percentageUsed.toFixed(1)}%)</span>
                 <span className="font-bold text-slate-200">
                   {formatCurrency(usedCredit)} / {formatCurrency(creditLimit)}
                 </span>
               </div>
               <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
                 <div
-                  className={`h-full transition-all ${percentageUsed > 80 ? 'bg-rose-500' : percentageUsed > 50 ? 'bg-amber-400' : 'bg-emerald-400'}`}
-                  style={{ width: `${Math.min(percentageUsed, 100)}%` }}
+                  className={`h-full transition-all duration-300 ${percentageUsed > 80 ? 'bg-rose-500' : percentageUsed > 50 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                  style={{ width: `${Math.min(Math.max(percentageUsed, 0), 100)}%` }}
                 />
               </div>
             </div>
