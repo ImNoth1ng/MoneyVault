@@ -6,11 +6,31 @@ import { router } from './router';
 import './App.css';
 
 function App() {
-  const { initialize } = useAuthStore();
+  const { initialize, checkTokenExpiration } = useAuthStore();
 
   useEffect(() => {
     initialize();
-  }, [initialize]);
+
+    const handleFocusOrVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkTokenExpiration();
+      }
+    };
+
+    // Check token expiration periodically every 30 seconds
+    const intervalId = setInterval(() => {
+      checkTokenExpiration();
+    }, 30000);
+
+    window.addEventListener('focus', handleFocusOrVisibility);
+    document.addEventListener('visibilitychange', handleFocusOrVisibility);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocusOrVisibility);
+      document.removeEventListener('visibilitychange', handleFocusOrVisibility);
+    };
+  }, [initialize, checkTokenExpiration]);
 
   return (
     <QueryProvider>
@@ -20,3 +40,4 @@ function App() {
 }
 
 export default App;
+
