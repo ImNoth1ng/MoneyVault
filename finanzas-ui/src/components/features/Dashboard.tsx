@@ -4,7 +4,7 @@ import { Card } from '../common/Card';
 import { LoadingSpinner } from '../common/Feedback';
 import { useAccounts, useAllSnapshots, useCreateGlobalSnapshot } from '../../hooks/useAccounts';
 import { useDebtors, useDebtTickets } from '../../hooks/useDebts';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency, formatDate } from '../../utils/formatters';
 import { Link } from 'react-router-dom';
 
 export const Dashboard = () => {
@@ -44,9 +44,19 @@ export const Dashboard = () => {
     return sum + used;
   }, 0);
 
-  // 3. DEUDAS POR COBRAR
+  // 3. DEUDAS POR COBRAR (Solo tickets pendientes, no pagados)
   const pendingTickets = tickets.filter((t) => !Boolean(t.isPaid || t.status === 'PAID'));
   const totalPendingReceivable = pendingTickets.reduce((sum, t) => sum + parseFloat(String(t.totalAmount || 0)), 0);
+
+  // Ordenar préstamos (tickets pendientes) por fecha de creación del ticket (más reciente primero)
+  const sortedPendingTickets = [...pendingTickets].sort((a, b) => {
+    const timeA = new Date(a.createdAt || a.issueDate || 0).getTime();
+    const timeB = new Date(b.createdAt || b.issueDate || 0).getTime();
+    if (timeA !== timeB) {
+      return timeB - timeA;
+    }
+    return Number(b.id) - Number(a.id);
+  });
 
   // 4. INVERSIONES (Suma de saldos en cuentas de inversión)
   const investmentAccounts = accounts.filter((a) => a.type === 'INVESTMENT' && a.active !== false);
@@ -337,23 +347,34 @@ export const Dashboard = () => {
           )}
         </Card>
 
-        <Card title="Tickets de Deuda Recientes" subtitle={`${pendingTickets.length} por cobrar`}>
-          {tickets.length === 0 ? (
-            <p className="text-xs text-slate-400 py-6 text-center font-medium">No hay tickets de deuda registrados.</p>
+        <Card title="Préstamos y Tickets Pendientes" subtitle={`${sortedPendingTickets.length} por cobrar`}>
+          {sortedPendingTickets.length === 0 ? (
+            <div className="py-8 text-center space-y-2">
+              <FileText className="w-8 h-8 text-slate-600 mx-auto" />
+              <p className="text-xs text-slate-400 font-medium">No hay préstamos o tickets pendientes por cobrar.</p>
+            </div>
           ) : (
             <div className="space-y-3">
-              {tickets.slice(0, 5).map((ticket) => {
-                const isPaid = Boolean(ticket.isPaid || ticket.status === 'PAID');
+              {sortedPendingTickets.map((ticket) => {
+                const debtor = debtors.find((d) => String(d.id) === String(ticket.debtorId));
+                const debtorName = ticket.debtorName || debtor?.name || `Deudor #${ticket.debtorId}`;
+                const ticketDate = ticket.createdAt || ticket.issueDate;
+
                 return (
-                  <div key={ticket.id} className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between shadow-sm">
+                  <div key={ticket.id} className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between shadow-sm hover:border-slate-700 transition">
                     <div>
-                      <p className="text-xs font-bold text-white">{ticket.description}</p>
-                      <p className="text-[10px] text-slate-400 font-semibold">Deudor ID: {ticket.debtorId}</p>
+                      <p className="text-xs font-bold text-white">{ticket.description || 'Sin descripción'}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] text-emerald-400 font-semibold">{debtorName}</span>
+                        {ticketDate && (
+                          <span className="text-[10px] text-slate-500 font-medium">• {formatDate(ticketDate)}</span>
+                        )}
+                      </div>
                     </div>
                     <div className="text-right">
                       <p className="text-xs font-mono font-black text-white">{formatCurrency(Number(ticket.totalAmount) || 0)}</p>
-                      <span className={`text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider inline-block mt-0.5 border ${isPaid ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'}`}>
-                        {isPaid ? 'Pagado' : 'Pendiente'}
+                      <span className="text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider inline-block mt-0.5 border bg-emerald-500/15 text-emerald-300 border-emerald-500/30">
+                        Pendiente
                       </span>
                     </div>
                   </div>
