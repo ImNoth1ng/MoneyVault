@@ -2,6 +2,7 @@
 export enum AccountType {
   DEBIT = 'DEBIT',
   CREDIT = 'CREDIT',
+  VALES = 'VALES',
   CASH = 'CASH',
   INVESTMENT = 'INVESTMENT',
 }

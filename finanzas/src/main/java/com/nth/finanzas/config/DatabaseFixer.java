@@ -33,5 +33,12 @@ public class DatabaseFixer implements CommandLineRunner {
         } catch (Exception e) {
             System.out.println("DB FIX INFO: could not modify balance_snapshots account_id - " + e.getMessage());
         }
+
+        try {
+            jdbcTemplate.execute("ALTER TABLE accounts MODIFY COLUMN type ENUM('DEBIT','CREDIT','VALES','CASH','INVESTMENT') NOT NULL");
+            System.out.println("DB FIX: Added 'VALES' to accounts.type.");
+        } catch (Exception e) {
+            System.out.println("DB FIX INFO: could not update accounts.type - " + e.getMessage());
+        }
     }
 }

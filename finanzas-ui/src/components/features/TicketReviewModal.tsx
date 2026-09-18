@@ -56,9 +56,9 @@ export const TicketReviewModal = ({ ticket, debtorName, onClose }: TicketReviewM
   const useTwoColumns = items.length >= 6;
 
   const modalContent = (
-    <div className="fixed inset-0 z-[99999] bg-[#0b0f19]/90 text-slate-100 flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-150 backdrop-blur-2xl">
+    <div className="fixed inset-0 z-[99999] bg-[#0b0f19]/90 text-slate-100 flex items-start sm:items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-150 backdrop-blur-2xl">
       {/* Contenedor Ficha de tamaño acotado y elegante para PC y Móviles (max-w-lg) */}
-      <div className="w-full max-w-lg bg-[#0f172a]/95 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto backdrop-blur-3xl relative">
+      <div className="w-full max-w-lg my-0 sm:my-6 bg-[#0f172a]/95 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4 backdrop-blur-3xl relative">
         
         {/* Encabezado Superior */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -102,7 +102,7 @@ export const TicketReviewModal = ({ ticket, debtorName, onClose }: TicketReviewM
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
                 <FileText className="w-3.5 h-3.5 text-cyan-400" /> Concepto Principal
               </p>
-              <p className="text-sm font-extrabold text-white mt-0.5">{ticket.description}</p>
+              <p className="text-sm font-extrabold text-white mt-0.5 break-words">{ticket.description}</p>
             </div>
             <div className="text-right text-[10px] text-slate-400 font-medium hidden sm:block">
               <span>{items.length} {items.length === 1 ? 'Concepto' : 'Conceptos'}</span>
@@ -122,9 +122,9 @@ export const TicketReviewModal = ({ ticket, debtorName, onClose }: TicketReviewM
                 {items.map((item, idx) => (
                   <div
                     key={idx}
-                    className="px-3 py-2 bg-slate-950/70 border border-slate-800 rounded-xl flex items-center justify-between text-xs hover:border-emerald-500/30 transition"
+                    className="px-3 py-2 bg-slate-950/70 border border-slate-800 rounded-xl flex items-start justify-between gap-3 text-xs hover:border-emerald-500/30 transition"
                   >
-                    <span className="font-bold text-slate-200 truncate pr-2">• {item.concept}</span>
+                    <span className="min-w-0 whitespace-normal break-words font-bold text-slate-200">• {item.concept}</span>
                     <span className="font-mono font-bold text-emerald-400 flex-shrink-0">
                       {formatCurrency(Number(item.amount) || 0)}
                     </span>

@@ -1,4 +1,4 @@
-import { Wallet, CreditCard, TrendingUp, DollarSign } from 'lucide-react';
+import { Wallet, CreditCard, TrendingUp, DollarSign, Ticket } from 'lucide-react';
 import { AccountType } from '../types';
 import dayjs from 'dayjs';
 
@@ -50,6 +50,8 @@ export const getAccountTypeIcon = (type: string | AccountType) => {
       return <TrendingUp className={iconClass} />;
     case AccountType.CASH:
       return <DollarSign className={iconClass} />;
+    case AccountType.VALES:
+      return <Ticket className={iconClass} />;
     default:
       return <Wallet className={iconClass} />;
   }
@@ -59,6 +61,7 @@ export const getAccountTypeLabel = (type: string | AccountType): string => {
   const labels: Record<string, string> = {
     DEBIT: 'Cuenta de Débito',
     CREDIT: 'Tarjeta de Crédito',
+    VALES: 'Vales',
     INVESTMENT: 'Inversión',
     CASH: 'Efectivo',
   };

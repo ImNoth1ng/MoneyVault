@@ -20,9 +20,9 @@ public class AccountRequest {
     private String name;
 
     @NotBlank(message = "El tipo de cuenta es obligatorio")
-    @Schema(description = "Tipo de cuenta", example = "DEBIT", allowableValues = {"DEBIT", "CREDIT", "CASH", "INVESTMENT"})
-    @Pattern(regexp = "DEBIT|CREDIT|CASH|INVESTMENT", message = "El tipo debe ser DEBIT, CREDIT, CASH o INVESTMENT")
-    private String type; // DEBIT, CREDIT, CASH, INVESTMENT
+    @Schema(description = "Tipo de cuenta", example = "DEBIT", allowableValues = {"DEBIT", "CREDIT", "VALES", "CASH", "INVESTMENT"})
+    @Pattern(regexp = "DEBIT|CREDIT|VALES|CASH|INVESTMENT", message = "El tipo debe ser DEBIT, CREDIT, VALES, CASH o INVESTMENT")
+    private String type; // DEBIT, CREDIT, VALES, CASH, INVESTMENT
 
     @NotNull(message = "El saldo actual es obligatorio")
     @Schema(description = "Saldo inicial o actual de la cuenta", example = "5000.00")

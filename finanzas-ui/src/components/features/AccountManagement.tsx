@@ -145,6 +145,7 @@ export const AccountManagement = () => {
   const filteredAccounts = accounts.filter((a) => {
     const t = String(a.type || 'DEBIT').toUpperCase();
     if (activeTab === 'CREDIT') return t === 'CREDIT' || t === 'CREDIT_CARD';
+    if (activeTab === 'DEBIT') return t === 'DEBIT' || t === 'VALES';
     return t === activeTab;
   });
 
@@ -157,7 +158,7 @@ export const AccountManagement = () => {
       case 'INVESTMENT':
         return 'Inversiones';
       default:
-        return 'Cuentas de Débito';
+        return 'Cuentas de Débito y Vales';
     }
   };
 
@@ -229,6 +230,7 @@ export const AccountManagement = () => {
       {showModal && (
         <AccountModal
           mode={modalMode}
+          initialAccountType={activeTab as AccountType}
           account={selectedAccount}
           onClose={() => setShowModal(false)}
           onSave={handleSave}

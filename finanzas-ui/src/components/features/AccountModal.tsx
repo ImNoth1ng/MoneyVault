@@ -29,6 +29,7 @@ export type AccountFormData = {
 
 interface AccountModalProps {
   mode: 'create' | 'edit_balance' | 'edit_full';
+  initialAccountType?: AccountType;
   account?: Account | null;
   onClose: () => void;
   onSave: (data: Partial<Account>) => void;
@@ -37,6 +38,7 @@ interface AccountModalProps {
 
 export const AccountModal = ({
   mode,
+  initialAccountType = AccountType.DEBIT,
   account,
   onClose,
   onSave,
@@ -52,7 +54,7 @@ export const AccountModal = ({
     resolver: zodResolver(accountSchema) as any,
     defaultValues: {
       name: '',
-      type: AccountType.DEBIT,
+      type: initialAccountType,
       currentBalance: 0,
       creditLimit: undefined,
       currency: 'MXN',
@@ -83,6 +85,11 @@ export const AccountModal = ({
   const isBalanceMode = mode === 'edit_balance';
   const isFullMode = mode === 'edit_full';
   const isCreateMode = mode === 'create';
+  const showTypeSelector = isFullMode || (isCreateMode && initialAccountType === AccountType.DEBIT);
+  const isValesType = selectedType === AccountType.VALES;
+  const typeOptions = isCreateMode && initialAccountType === AccountType.DEBIT
+    ? [AccountType.DEBIT, AccountType.VALES]
+    : Object.values(AccountType);
 
   return (
     <div className="fixed inset-0 bg-[#0b0f19]/80 backdrop-blur-xl flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
@@ -102,7 +109,7 @@ export const AccountModal = ({
             ) : (
               <>
                 <Wallet className="w-5 h-5 text-emerald-400" />
-                <span>{isCreditType ? 'Nueva Tarjeta de Crédito' : 'Nueva Cuenta Bancaria'}</span>
+                <span>{isCreditType ? 'Nueva Tarjeta de Crédito' : isValesType ? 'Nuevos Vales' : 'Nueva Cuenta Bancaria'}</span>
               </>
             )}
           </h2>
@@ -132,15 +139,18 @@ export const AccountModal = ({
                 {...register('name')}
               />
 
-              <Select
-                label="Tipo de Cuenta"
-                options={Object.values(AccountType).map((type) => ({
-                  value: type,
-                  label: getAccountTypeLabel(type),
-                }))}
-                error={errors.type?.message}
-                {...register('type')}
-              />
+              {showTypeSelector && (
+                <Select
+                  label="Tipo de Cuenta"
+                  options={typeOptions.map((type) => ({
+                    value: type,
+                    label: getAccountTypeLabel(type),
+                  }))}
+                  error={errors.type?.message}
+                  {...register('type')}
+                />
+              )}
+              {!showTypeSelector && <input type="hidden" {...register('type')} />}
             </>
           )}
 
@@ -161,7 +171,7 @@ export const AccountModal = ({
             {...register('currentBalance')}
           />
 
-          {(isCreditType || isCreateMode || isFullMode) && (
+          {(isCreditType || isFullMode) && (
             <Input
               label={isCreditType ? "Límite de Crédito *" : "Límite de Crédito (Opcional)"}
               type="number"

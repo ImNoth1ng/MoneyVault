@@ -79,6 +79,6 @@ public class Account {
     }
 
     public enum AccountType {
-        DEBIT, CREDIT, CASH, INVESTMENT
+        DEBIT, CREDIT, VALES, CASH, INVESTMENT
     }
 }
