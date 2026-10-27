@@ -15,6 +15,7 @@ import { Debtor, DebtTicket, TicketItem } from '../types';
 import { formatCurrency } from '../utils/formatters';
 import { recurringService, RecurringServiceItem } from '../services/recurringService';
 import { TicketReviewModal } from '../components/features/TicketReviewModal';
+import { AcceptTicketPaymentModal } from '../components/features/AcceptTicketPaymentModal';
 
 export default function DebtorsPage() {
   const { data: debtors = [], isLoading: loadingDebtors, isError: errorDebtors, refetch: refetchDebtors } = useDebtors();
@@ -55,6 +56,10 @@ export default function DebtorsPage() {
 
   // Ficha de Cobro / Snapshot Review Modal
   const [reviewTicket, setReviewTicket] = useState<DebtTicket | null>(null);
+
+  // Modal para Aceptar Pago de Ticket con Excedente
+  const [ticketToPay, setTicketToPay] = useState<DebtTicket | null>(null);
+  const [showAcceptPaymentModal, setShowAcceptPaymentModal] = useState(false);
 
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -193,15 +198,20 @@ export default function DebtorsPage() {
 
   const handleTogglePaid = async (ticket: DebtTicket) => {
     const paid = isTicketPaid(ticket);
-    const actionLabel = paid ? 'desmarcar como pagado y mover a PENDIENTES' : 'marcar como PAGADO y mover a HISTÓRICO';
-    if (!window.confirm(`¿Deseas ${actionLabel} este ticket?`)) return;
+
+    if (!paid) {
+      // Abre ventana para seleccionar cuenta donde se recibió el dinero y monto con posible excedente
+      setTicketToPay(ticket);
+      setShowAcceptPaymentModal(true);
+      return;
+    }
+
+    // Si ya estaba pagado, permitir desmarcarlo
+    if (!window.confirm('¿Deseas desmarcar como pagado este ticket y devolverlo a PENDIENTES?')) return;
 
     try {
       await markPaid.mutateAsync(ticket.id);
-      triggerFeedback(
-        'success',
-        paid ? 'Ticket movido nuevamente a Pendientes' : 'Ticket marcado como pagado y movido a Histórico'
-      );
+      triggerFeedback('success', 'Ticket movido nuevamente a Pendientes');
     } catch (err: any) {
       triggerFeedback('error', err.response?.data?.message || 'No se pudo actualizar el estado del ticket');
     }
@@ -797,6 +807,18 @@ export default function DebtorsPage() {
           onClose={() => setReviewTicket(null)}
         />
       )}
+
+      {/* MODAL PARA ACEPTAR PAGO DE TICKET CON CUENTA Y EXCEDENTE */}
+      <AcceptTicketPaymentModal
+        isOpen={showAcceptPaymentModal}
+        ticket={ticketToPay}
+        debtorName={debtors.find((d) => String(d.id) === String(ticketToPay?.debtorId))?.name}
+        onClose={() => {
+          setShowAcceptPaymentModal(false);
+          setTicketToPay(null);
+        }}
+        onSuccess={(msg) => triggerFeedback('success', msg)}
+      />
 
       {/* MODAL: PROGRAMAR / EDITAR SERVICIO RECURRENTE */}
       {showRecurringModal && (

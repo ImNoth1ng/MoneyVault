@@ -9,6 +9,7 @@ import RegisterPage from './pages/RegisterPage';
 import AccountsPage from './pages/AccountsPage';
 import DebtorsPage from './pages/DebtorsPage';
 import { SnapshotsPage } from './pages/SnapshotsPage';
+import TransactionsPage from './pages/TransactionsPage';
 
 // Protected Route Wrapper
 const ProtectedRoute = () => {
@@ -66,6 +67,14 @@ export const router = createBrowserRouter([
                     {
                         path: 'debtors',
                         element: <DebtorsPage />,
+                    },
+                    {
+                        path: 'movimientos',
+                        element: <TransactionsPage />,
+                    },
+                    {
+                        path: 'transactions',
+                        element: <Navigate to="/movimientos" replace />,
                     },
                     {
                         path: 'snapshots',

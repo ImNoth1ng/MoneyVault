@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { Menu, X, LogOut, BarChart3, Wallet, Users, DollarSign, Camera, CreditCard, Banknote, TrendingUp, KeyRound } from 'lucide-react';
+import { Menu, X, LogOut, BarChart3, Wallet, Users, DollarSign, Camera, CreditCard, Banknote, TrendingUp, KeyRound, ArrowLeftRight } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ChangePasswordModal } from '../features/ChangePasswordModal';
@@ -24,6 +24,7 @@ export const MainLayout = () => {
     { icon: <CreditCard className="w-5 h-5" />, label: 'Tarjetas de Crédito', shortLabel: 'Crédito', href: '/accounts?type=CREDIT' },
     { icon: <Banknote className="w-5 h-5" />, label: 'Efectivo', shortLabel: 'Efectivo', href: '/accounts?type=CASH' },
     { icon: <TrendingUp className="w-5 h-5" />, label: 'Inversiones', shortLabel: 'Inversiones', href: '/accounts?type=INVESTMENT' },
+    { icon: <ArrowLeftRight className="w-5 h-5" />, label: 'Movimientos', shortLabel: 'Movimientos', href: '/movimientos' },
     { icon: <Users className="w-5 h-5" />, label: 'Deudores y Tickets', shortLabel: 'Deudores', href: '/debtors' },
     { icon: <Camera className="w-5 h-5" />, label: 'Snapshots e Histórico', shortLabel: 'Snapshots', href: '/snapshots' },
   ];

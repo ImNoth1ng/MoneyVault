@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Wallet, TrendingUp, Users, Plus, ArrowRight, AlertCircle, Camera, CheckCircle2, AlertTriangle, Calendar, CreditCard, Banknote, FileText } from 'lucide-react';
+import { Wallet, TrendingUp, Users, Plus, ArrowRight, AlertCircle, Camera, CheckCircle2, AlertTriangle, Calendar, CreditCard, Banknote, FileText, ArrowLeftRight, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { Card } from '../common/Card';
 import { LoadingSpinner } from '../common/Feedback';
 import { useAccounts, useAllSnapshots, useCreateGlobalSnapshot } from '../../hooks/useAccounts';
 import { useDebtors, useDebtTickets } from '../../hooks/useDebts';
+import { useTransactions } from '../../hooks/useTransactions';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { Link } from 'react-router-dom';
 
@@ -12,6 +13,7 @@ export const Dashboard = () => {
   const { data: debtors = [], isLoading: debtorsLoading } = useDebtors();
   const { data: tickets = [], isLoading: ticketsLoading } = useDebtTickets();
   const { data: snapshots = [], isLoading: snapshotsLoading } = useAllSnapshots();
+  const { data: transactions = [] } = useTransactions();
 
   const createGlobalSnapshotMutation = useCreateGlobalSnapshot();
   const [showSnapshotModal, setShowSnapshotModal] = useState(false);
@@ -127,6 +129,13 @@ export const Dashboard = () => {
           <p className="text-slate-400 text-xs sm:text-sm mt-0.5 font-medium">Control de Dinero Libre, Liquidez Total y Deudas en Tarjeta</p>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            to="/movimientos"
+            className="px-4 py-2.5 bg-slate-900/90 border border-slate-800 hover:border-emerald-500/40 text-slate-200 hover:text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+          >
+            <ArrowLeftRight className="w-4 h-4 text-emerald-400" />
+            <span>Movimientos</span>
+          </Link>
           <button
             onClick={() => setShowSnapshotModal(true)}
             className="px-4 py-2.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 rounded-xl text-xs font-bold transition flex items-center gap-2"
@@ -390,6 +399,88 @@ export const Dashboard = () => {
           )}
         </Card>
       </div>
+
+      {/* 💳 TARJETA DE ÚLTIMOS MOVIMIENTOS REGISTRADOS */}
+      <Card
+        title="Últimos Movimientos Registrados"
+        subtitle={`${transactions.length} en total (Gastos, Ingresos y Transferencias)`}
+      >
+        {transactions.length === 0 ? (
+          <div className="py-8 text-center space-y-2">
+            <p className="text-xs text-slate-400 font-medium">No has registrado ningún gasto o ingreso aún.</p>
+            <Link
+              to="/movimientos"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300"
+            >
+              <span>Registrar mi primer movimiento</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {transactions.slice(0, 4).map((tx) => {
+                const isExpense = tx.type === 'EXPENSE';
+                const isIncome = tx.type === 'INCOME';
+                const amountNum = Number(tx.amount) || 0;
+
+                return (
+                  <div
+                    key={tx.id}
+                    className="p-3 bg-slate-900/90 border border-slate-800 rounded-xl flex items-center justify-between hover:border-slate-700 transition"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className={`p-2 rounded-xl ${
+                          isExpense
+                            ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                            : isIncome
+                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
+                        }`}
+                      >
+                        {isExpense && <ArrowDownLeft className="w-4 h-4" />}
+                        {isIncome && <ArrowUpRight className="w-4 h-4" />}
+                        {!isExpense && !isIncome && <ArrowLeftRight className="w-4 h-4" />}
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-white leading-tight">
+                          {tx.description || (isExpense ? 'Gasto' : isIncome ? 'Ingreso' : 'Transferencia')}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400">
+                          <span className="font-semibold text-slate-300">{tx.accountName}</span>
+                          {tx.category && <span className="text-emerald-400">• {tx.category}</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span
+                        className={`font-mono font-black text-xs ${
+                          isExpense ? 'text-rose-400' : isIncome ? 'text-emerald-400' : 'text-cyan-400'
+                        }`}
+                      >
+                        {isExpense ? `-${formatCurrency(amountNum)}` : isIncome ? `+${formatCurrency(amountNum)}` : formatCurrency(amountNum)}
+                      </span>
+                      <p className="text-[9px] text-slate-500 mt-0.5">
+                        {tx.transactionDate ? formatDate(tx.transactionDate) : ''}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="pt-2 border-t border-slate-800 flex justify-end">
+              <Link
+                to="/movimientos"
+                className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 transition"
+              >
+                <span>Ver todos los movimientos y registrar nuevo</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </div>
+        )}
+      </Card>
 
       {/* MODAL: CAPTURAR SNAPSHOT GLOBAL */}
       {showSnapshotModal && (

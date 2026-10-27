@@ -100,16 +100,44 @@ export interface Account {
 
 // Interfaces de transacciones
 export interface Transaction {
-  id: string;
-  accountId: string;
+  id: string | number;
+  userId?: string | number;
+  accountId: string | number;
+  accountName?: string;
+  accountType?: string;
+  destinationAccountId?: string | number | null;
+  destinationAccountName?: string | null;
+  destinationAccountType?: string | null;
   amount: string | number;
-  type: TransactionType;
-  status: TransactionStatus;
-  description: string;
+  type: TransactionType | string;
+  status?: TransactionStatus;
+  description?: string;
   category?: string;
-  date: string;
-  createdAt: string;
-  updatedAt: string;
+  senderOrRecipient?: string;
+  debtTicketId?: string | number | null;
+  transactionDate?: string;
+  date?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TransactionRequest {
+  accountId: string | number;
+  destinationAccountId?: string | number | null;
+  amount: number;
+  type: 'EXPENSE' | 'INCOME' | 'TRANSFER';
+  category?: string;
+  description?: string;
+  senderOrRecipient?: string;
+  debtTicketId?: string | number | null;
+  transactionDate?: string;
+}
+
+export interface TicketPaymentRequest {
+  accountId: string | number;
+  amountReceived: number;
+  paymentDate?: string;
+  notes?: string;
 }
 
 // Interfaces de deudores

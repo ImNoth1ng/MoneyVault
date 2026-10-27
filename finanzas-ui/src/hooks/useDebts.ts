@@ -81,6 +81,23 @@ export const useMarkTicketPaid = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['debt-tickets'] });
       queryClient.invalidateQueries({ queryKey: ['debtors'] });
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    },
+  });
+};
+
+export const usePayTicket = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, paymentData }: { id: string | number; paymentData: import('../types').TicketPaymentRequest }) =>
+      ticketService.pay(id, paymentData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['debt-tickets'] });
+      queryClient.invalidateQueries({ queryKey: ['debtors'] });
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['snapshots'] });
     },
   });
 };

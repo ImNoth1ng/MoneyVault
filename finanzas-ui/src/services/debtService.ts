@@ -71,6 +71,11 @@ export const ticketService = {
     return data;
   },
 
+  pay: async (id: string | number, paymentData: import('../types').TicketPaymentRequest): Promise<DebtTicket> => {
+    const { data } = await client.put<DebtTicket>(`/debt-tickets/${id}/pay`, paymentData);
+    return data;
+  },
+
   delete: async (id: string | number): Promise<void> => {
     await client.delete(`/debt-tickets/${id}`);
   },
