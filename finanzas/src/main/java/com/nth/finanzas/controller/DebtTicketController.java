@@ -88,14 +88,29 @@ public class DebtTicketController {
     }
 
     @PutMapping("/{id}/mark-paid")
-    @Operation(summary = "Marcar ticket como pagado", description = "Marca un ticket de deuda como pagado.")
+    @Operation(summary = "Marcar ticket como pagado (toggle simple)", description = "Marca un ticket de deuda como pagado o desmarcado.")
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Ticket marcado como pagado"),
+        @ApiResponse(responseCode = "200", description = "Ticket actualizado"),
         @ApiResponse(responseCode = "404", description = "Ticket no encontrado")
     })
     public ResponseEntity<DebtTicketResponse> markTicketAsPaid(@PathVariable Long id) {
         Long userId = SecurityUtil.getCurrentUserId();
         DebtTicketResponse response = debtTicketService.markTicketAsPaid(userId, id);
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}/pay")
+    @Operation(summary = "Aceptar pago de ticket con cuenta y excedente", description = "Marca el ticket como pagado, ingresa los fondos a la cuenta seleccionada con opción de registrar excedente y crea el movimiento de ingreso.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Pago procesado e ingresado a cuenta exitosamente"),
+        @ApiResponse(responseCode = "400", description = "Datos de pago inválidos"),
+        @ApiResponse(responseCode = "404", description = "Ticket o cuenta no encontrada")
+    })
+    public ResponseEntity<DebtTicketResponse> payDebtTicket(
+            @PathVariable Long id,
+            @Valid @RequestBody com.nth.finanzas.dto.TicketPaymentRequest request) {
+        Long userId = SecurityUtil.getCurrentUserId();
+        DebtTicketResponse response = debtTicketService.payDebtTicket(userId, id, request);
         return ResponseEntity.ok(response);
     }
 
