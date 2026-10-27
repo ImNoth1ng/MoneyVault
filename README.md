@@ -168,6 +168,16 @@ Endpoints principales:
 
 ---
 
+## Documentación del Proyecto
+
+En la carpeta [`context/`](context/) se encuentran las guías detalladas de arquitectura y diseño:
+- [Sistema de Diseño e Iconografía (DESIGN_GUIDELINES.md)](context/DESIGN_GUIDELINES.md): Reglas de UI/UX, paleta de colores, filosofía de cristal líquido (Liquid Glass) y prohibición de emojis.
+- [Endpoints de la API REST (API_ENDPOINTS.md)](context/API_ENDPOINTS.md): Documentación exhaustiva con ejemplos JSON y cURL de todos los servicios.
+- [Guía de Configuración Local (SETUP.md)](context/SETUP.md): Pasos para configurar entorno y dependencias.
+- [Guía de Despliegue en Producción (DEPLOYMENT_GUIDE.md)](context/DEPLOYMENT_GUIDE.md): Instrucciones para puesta en marcha con Docker y Nginx.
+
+---
+
 ## Licencia y Autores
 
 Desarrollado para el control financiero personal con arquitectura limpia.

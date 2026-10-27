@@ -190,12 +190,51 @@ Usuario registrado con éxito
 ### 19. Listar Tickets de un Deudor
 **GET** `/api/v1/debt-tickets/debtor/{debtorId}`
 
-### 20. Marcar Ticket como Pagado
+### 20. Marcar Ticket como Pagado (Toggle simple)
 **PUT** `/api/v1/debt-tickets/{id}/mark-paid`  
 **Headers:** `Authorization: Bearer {token}`
 
-### 21. Eliminar Ticket
+### 21. Aceptar Pago de Ticket (con cuenta destino y excedente)
+**PUT** `/api/v1/debt-tickets/{id}/pay`  
+**Headers:** `Authorization: Bearer {token}`
+```json
+{
+  "accountId": 1,
+  "amountReceived": 160.00,
+  "paymentDate": "2026-10-27T16:00:00",
+  "notes": "Pago vía transferencia SPEI con propina/excedente"
+}
+```
+
+### 22. Eliminar Ticket
 **DELETE** `/api/v1/debt-tickets/{id}`
+
+---
+
+## Movimientos (Gastos, Ingresos y Transferencias)
+
+### 23. Crear Movimiento
+**POST** `/api/v1/transactions`  
+**Headers:** `Authorization: Bearer {token}`
+```json
+{
+  "accountId": 1,
+  "destinationAccountId": null,
+  "amount": 250.00,
+  "type": "EXPENSE",
+  "category": "Comida",
+  "description": "Cena en restaurante",
+  "transactionDate": "2026-10-27T15:30:00"
+}
+```
+
+### 24. Listar Mis Movimientos
+**GET** `/api/v1/transactions?type=EXPENSE` (filtro opcional: EXPENSE, INCOME, TRANSFER)  
+**Headers:** `Authorization: Bearer {token}`
+
+### 25. Eliminar Movimiento (Revierte saldos)
+**DELETE** `/api/v1/transactions/{id}`  
+**Headers:** `Authorization: Bearer {token}`
 
 ---
 
