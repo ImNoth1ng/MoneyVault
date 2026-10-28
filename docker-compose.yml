@@ -1,12 +1,9 @@
-version: '3.8'
-
 services:
   # ==========================================
   # Service 1: MySQL Database (Aislado)
   # ==========================================
   finanzas-db:
     image: mysql:8.0
-    container_name: moneyvault-db
     restart: always
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-finanzas_db}
@@ -30,7 +27,6 @@ services:
     build:
       context: ./finanzas
       dockerfile: Dockerfile
-    container_name: moneyvault-api
     restart: always
     depends_on:
       finanzas-db:
@@ -57,7 +53,6 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: /api/v1
-    container_name: moneyvault-ui
     restart: always
     depends_on:
       - finanzas-api
@@ -72,4 +67,4 @@ networks:
 
 volumes:
   mysql_data:
-    driver: local
+    name: moneyvault_mysql_data
