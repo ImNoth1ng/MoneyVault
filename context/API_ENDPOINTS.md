@@ -238,6 +238,46 @@ Usuario registrado con éxito
 
 ---
 
+## Inversiones & Mercado Bursátil
+
+### 26. Registrar Compra de Activo / Posición
+**POST** `/api/v1/investments`  
+**Headers:** `Authorization: Bearer {token}`
+```json
+{
+  "accountId": 2,
+  "symbol": "NVDA",
+  "name": "NVIDIA Corporation",
+  "quantity": 1.0,
+  "buyPrice": 4074.02,
+  "currency": "MXN",
+  "assetType": "STOCK",
+  "buyDate": "2026-10-27T10:00:00",
+  "deductFromCash": true,
+  "notes": "Compra a largo plazo"
+}
+```
+
+### 27. Listar Posiciones de Inversión
+**GET** `/api/v1/investments` (filtro opcional: `?accountId=2`)  
+**Headers:** `Authorization: Bearer {token}`  
+*Devuelve cada posición con cotización en tiempo real desde Yahoo Finance API, valor de mercado, ganancia/pérdida no realizada y conversión a moneda base.*
+
+### 28. Resumen Consolidado del Portafolio
+**GET** `/api/v1/investments/summary`  
+**Headers:** `Authorization: Bearer {token}`  
+*Devuelve valor total en MXN, desglose de poder de compra líquido por broker, valor de activos, ROI global, tipo de cambio USD/MXN y distribución para gráficos.*
+
+### 29. Consultar Cotizaciones de Mercado
+**GET** `/api/v1/investments/quotes?symbols=NVDA,VOO&refresh=false`  
+**Headers:** `Authorization: Bearer {token}`
+
+### 30. Forzar Refresco de Cotizaciones
+**POST** `/api/v1/investments/refresh`  
+**Headers:** `Authorization: Bearer {token}`
+
+---
+
 ## Estructura de Carpetas Creada
 
 ```
