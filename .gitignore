@@ -1,1 +1,26 @@
+# Dependencies & Build Outputs
 ./finanzas-ui/node_modules
+./finanzas-ui/dist
+./finanzas/target
+target/
+node_modules/
+dist/
+
+# Environment & Secrets (NEVER commit real secrets)
+.env
+.env.*
+!.env.example
+finanzas/.env
+finanzas/.env.*
+!finanzas/.env.example
+finanzas-ui/.env
+finanzas-ui/.env.*
+!finanzas-ui/.env.example
+
+# IDE & OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+finanzas/compile_output.txt

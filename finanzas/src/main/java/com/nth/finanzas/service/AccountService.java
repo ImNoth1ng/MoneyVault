@@ -58,29 +58,10 @@ public class AccountService {
                 .collect(Collectors.toList());
     }
 
-    public AccountResponse getAccountById(Long accountId) {
-        Account account = accountRepository.findById(accountId)
-            .orElseThrow(() -> new RuntimeException("Cuenta no encontrada"));
-        return mapToResponse(account);
-    }
-
     public AccountResponse getAccountById(Long userId, Long accountId) {
         Account account = accountRepository.findByIdAndUserId(accountId, userId)
             .orElseThrow(() -> new RuntimeException("Cuenta no encontrada o no autorizada"));
         return mapToResponse(account);
-    }
-
-    public AccountResponse updateAccount(Long accountId, AccountRequest request) {
-        Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new RuntimeException("Cuenta no encontrada"));
-
-        updateAccountFields(account, request);
-        Account updatedAccount = accountRepository.save(account);
-
-        // Auto-create snapshot on account update
-        autoCreateSnapshot(updatedAccount.getUser(), updatedAccount);
-
-        return mapToResponse(updatedAccount);
     }
 
     public AccountResponse updateAccount(Long userId, Long accountId, AccountRequest request) {
@@ -109,10 +90,6 @@ public class AccountService {
         if (request.getB100Count() != null) account.setB100Count(request.getB100Count());
         if (request.getB50Count() != null) account.setB50Count(request.getB50Count());
         if (request.getB20Count() != null) account.setB20Count(request.getB20Count());
-    }
-
-    public void deleteAccount(Long accountId) {
-        accountRepository.deleteById(accountId);
     }
 
     public void deleteAccount(Long userId, Long accountId) {

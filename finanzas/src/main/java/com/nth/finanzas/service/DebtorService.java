@@ -40,27 +40,10 @@ public class DebtorService {
                 .collect(Collectors.toList());
     }
 
-    public DebtorResponse getDebtorById(Long debtorId) {
-        Debtor debtor = debtorRepository.findById(debtorId)
-                .orElseThrow(() -> new RuntimeException("Deudor no encontrado"));
-        return mapToResponse(debtor);
-    }
-
     public DebtorResponse getDebtorById(Long userId, Long debtorId) {
         Debtor debtor = debtorRepository.findByIdAndUserId(debtorId, userId)
                 .orElseThrow(() -> new RuntimeException("Deudor no encontrado o no autorizado"));
         return mapToResponse(debtor);
-    }
-
-    public DebtorResponse updateDebtor(Long debtorId, DebtorRequest request) {
-        Debtor debtor = debtorRepository.findById(debtorId)
-                .orElseThrow(() -> new RuntimeException("Deudor no encontrado"));
-
-        debtor.setName(request.getName());
-        debtor.setContactInfo(request.getContactInfo());
-
-        Debtor updatedDebtor = debtorRepository.save(debtor);
-        return mapToResponse(updatedDebtor);
     }
 
     public DebtorResponse updateDebtor(Long userId, Long debtorId, DebtorRequest request) {
@@ -72,10 +55,6 @@ public class DebtorService {
 
         Debtor updatedDebtor = debtorRepository.save(debtor);
         return mapToResponse(updatedDebtor);
-    }
-
-    public void deleteDebtor(Long debtorId) {
-        debtorRepository.deleteById(debtorId);
     }
 
     public void deleteDebtor(Long userId, Long debtorId) {

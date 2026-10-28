@@ -14,6 +14,7 @@ public class RateLimiterService {
     private static final int MAX_ATTEMPTS = 5;
     private static final long WINDOW_DURATION_MS = TimeUnit.MINUTES.toMillis(5);
     private static final long LOCK_DURATION_MS = TimeUnit.MINUTES.toMillis(15);
+    private static final int MAX_TRACKED_KEYS = 10000;
 
     private final Map<String, AttemptTracker> attemptsMap = new ConcurrentHashMap<>();
 
@@ -81,6 +82,13 @@ public class RateLimiterService {
     public synchronized void recordFailedAttempt(String key) {
         if (key == null || key.isBlank()) return;
         long now = System.currentTimeMillis();
+
+        if (attemptsMap.size() >= MAX_TRACKED_KEYS) {
+            attemptsMap.entrySet().removeIf(e -> !e.getValue().isLocked(now) && e.getValue().isWindowExpired(now));
+            if (attemptsMap.size() >= MAX_TRACKED_KEYS) {
+                return;
+            }
+        }
 
         attemptsMap.compute(key, (k, tracker) -> {
             if (tracker == null || tracker.isWindowExpired(now) || (!tracker.isLocked(now) && tracker.lockedUntil > 0)) {

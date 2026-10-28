@@ -28,9 +28,21 @@ public class MarketDataService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    // Cache con TTL de 5 minutos
+    // Cache con TTL de 5 minutos y límite máximo para evitar OOM DoS
     private static final Duration CACHE_TTL = Duration.ofMinutes(5);
+    private static final int MAX_CACHE_SIZE = 500;
+    private static final java.util.regex.Pattern SAFE_SYMBOL_PATTERN = java.util.regex.Pattern.compile("^[A-Z0-9.^=-]{1,15}$");
     private final Map<String, CacheEntry> quoteCache = new ConcurrentHashMap<>();
+
+    private void putInCache(String key, StockQuoteDTO quote) {
+        if (quoteCache.size() >= MAX_CACHE_SIZE) {
+            quoteCache.entrySet().removeIf(e -> e.getValue().isExpired());
+            if (quoteCache.size() >= MAX_CACHE_SIZE) {
+                quoteCache.clear();
+            }
+        }
+        quoteCache.put(key, new CacheEntry(quote));
+    }
 
     private static class CacheEntry {
         final StockQuoteDTO quote;
@@ -68,6 +80,10 @@ public class MarketDataService {
         }
 
         String symbol = rawSymbol.trim().toUpperCase();
+        if (!SAFE_SYMBOL_PATTERN.matcher(symbol).matches()) {
+            log.warn("Símbolo de cotización rechazado por formato inválido: {}", symbol);
+            return null;
+        }
 
         // 1. Revisar cache si no ha expirado
         CacheEntry entry = quoteCache.get(symbol);
@@ -86,8 +102,8 @@ public class MarketDataService {
 
             StockQuoteDTO mxQuote = fetchQuoteDirect(mxSymbol, symbol);
             if (mxQuote != null && mxQuote.getRegularMarketPrice() != null && mxQuote.getRegularMarketPrice().compareTo(BigDecimal.ZERO) > 0) {
-                quoteCache.put(mxSymbol, new CacheEntry(mxQuote));
-                quoteCache.put(symbol, new CacheEntry(mxQuote));
+                putInCache(mxSymbol, mxQuote);
+                putInCache(symbol, mxQuote);
                 return mxQuote;
             }
         }
@@ -95,7 +111,7 @@ public class MarketDataService {
         // 2. Consultar símbolo directo (ej. si ya tiene .MX, o es un ticker internacional o cripto)
         StockQuoteDTO directQuote = fetchQuoteDirect(symbol, symbol);
         if (directQuote != null && directQuote.getRegularMarketPrice() != null && directQuote.getRegularMarketPrice().compareTo(BigDecimal.ZERO) > 0) {
-            quoteCache.put(symbol, new CacheEntry(directQuote));
+            putInCache(symbol, directQuote);
             return directQuote;
         }
 
@@ -125,6 +141,9 @@ public class MarketDataService {
     }
 
     private StockQuoteDTO fetchQuoteDirect(String remoteSymbol, String originalSymbol) {
+        if (!SAFE_SYMBOL_PATTERN.matcher(remoteSymbol).matches()) {
+            return null;
+        }
         try {
             String url = String.format("https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=1d&range=1mo", remoteSymbol);
 

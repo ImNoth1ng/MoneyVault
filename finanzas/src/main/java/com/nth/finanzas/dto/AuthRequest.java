@@ -21,6 +21,6 @@ public class AuthRequest {
 
     @NotBlank(message = "La contraseña es obligatoria")
     @Schema(description = "Contraseña de acceso", example = "Password123!")
-    @Size(min = 8, max = 255, message = "La contraseña debe tener al menos 8 caracteres")
+    @Size(min = 8, max = 72, message = "La contraseña debe tener entre 8 y 72 caracteres")
     private String password;
 }

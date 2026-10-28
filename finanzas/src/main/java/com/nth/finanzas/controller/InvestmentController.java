@@ -81,6 +81,9 @@ public class InvestmentController {
     public ResponseEntity<Map<String, StockQuoteDTO>> getQuotes(
             @RequestParam List<String> symbols,
             @RequestParam(defaultValue = "false") boolean refresh) {
+        if (symbols != null && symbols.size() > 30) {
+            throw new IllegalArgumentException("No se pueden consultar más de 30 símbolos por solicitud");
+        }
         if (refresh) {
             marketDataService.clearCache();
         }

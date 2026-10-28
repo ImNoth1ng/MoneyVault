@@ -25,10 +25,11 @@ public class RegisterRequest {
 
     @NotBlank(message = "La contraseña es obligatoria")
     @Schema(description = "Contraseña de la cuenta", example = "Password123!")
-    @Size(min = 8, max = 255, message = "La contraseña debe tener al menos 8 caracteres")
+    @Size(min = 8, max = 72, message = "La contraseña debe tener entre 8 y 72 caracteres")
     private String password;
 
     @NotBlank(message = "La confirmación de contraseña es obligatoria")
     @Schema(description = "Confirmación de la contraseña", example = "Password123!")
+    @Size(min = 8, max = 72, message = "La confirmación de contraseña debe tener entre 8 y 72 caracteres")
     private String passwordConfirm;
 }

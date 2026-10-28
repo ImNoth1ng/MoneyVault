@@ -16,15 +16,17 @@ import lombok.NoArgsConstructor;
 public class ChangePasswordRequest {
 
     @NotBlank(message = "La contraseña actual es obligatoria")
+    @Size(max = 72, message = "La contraseña actual no puede superar 72 caracteres")
     @Schema(description = "Contraseña actual del usuario", example = "Password123!")
     private String currentPassword;
 
     @NotBlank(message = "La nueva contraseña es obligatoria")
-    @Size(min = 8, max = 255, message = "La nueva contraseña debe tener al menos 8 caracteres")
+    @Size(min = 8, max = 72, message = "La nueva contraseña debe tener entre 8 y 72 caracteres")
     @Schema(description = "Nueva contraseña", example = "NuevaPassword123!")
     private String newPassword;
 
     @NotBlank(message = "La confirmación de la nueva contraseña es obligatoria")
+    @Size(min = 8, max = 72, message = "La confirmación de la nueva contraseña debe tener entre 8 y 72 caracteres")
     @Schema(description = "Confirmación de la nueva contraseña", example = "NuevaPassword123!")
     private String newPasswordConfirm;
 }

@@ -42,13 +42,21 @@ public class AuthController {
     private final HttpServletRequest httpRequest;
 
     private String getClientIp() {
-        String xfHeader = httpRequest.getHeader("X-Forwarded-For");
-        if (xfHeader != null && !xfHeader.isBlank()) {
-            return xfHeader.split(",")[0].trim();
+        // 1. Si pasa por Cloudflare Tunnel, CF-Connecting-IP contiene la IP real del usuario (no falsificable tras Cloudflare)
+        String cfIp = httpRequest.getHeader("CF-Connecting-IP");
+        if (cfIp != null && !cfIp.isBlank()) {
+            return cfIp.trim();
         }
+        // 2. X-Real-IP establecido por el proxy inverso Nginx
         String realIp = httpRequest.getHeader("X-Real-IP");
         if (realIp != null && !realIp.isBlank()) {
-            return realIp;
+            return realIp.trim();
+        }
+        // 3. Último salto de X-Forwarded-For
+        String xfHeader = httpRequest.getHeader("X-Forwarded-For");
+        if (xfHeader != null && !xfHeader.isBlank()) {
+            String[] ips = xfHeader.split(",");
+            return ips[ips.length - 1].trim();
         }
         return httpRequest.getRemoteAddr();
     }
@@ -59,10 +67,19 @@ public class AuthController {
             description = "Crea una nueva cuenta de usuario con el rol ROLE_USER por defecto.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Usuario registrado con éxito"),
-            @ApiResponse(responseCode = "400", description = "Los datos enviados no son válidos o el usuario ya existe")
+            @ApiResponse(responseCode = "400", description = "Los datos enviados no son válidos o el usuario ya existe"),
+            @ApiResponse(responseCode = "429", description = "Demasiados intentos de registro")
     })
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
-        log.info("Intento de registro para username={} email={}", request.getUsername(), request.getEmail());
+        String registerRateKey = "reg:" + getClientIp();
+        if (rateLimiterService.isBlocked(registerRateKey)) {
+            long remaining = rateLimiterService.getRemainingBlockMinutes(registerRateKey);
+            log.warn("Registro bloqueado para IP={} por exceso de intentos", getClientIp());
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body("Demasiados intentos. Por favor intenta de nuevo en " + remaining + " minutos.");
+        }
+
+        log.info("Intento de registro para username={}", request.getUsername());
 
         // Validar que contraseña coincida
         if (!request.getPassword().equals(request.getPasswordConfirm())) {
@@ -72,14 +89,19 @@ public class AuthController {
 
         // Validar que el usuario no exista
         if (userRepository.existsByUsername(request.getUsername())) {
+            rateLimiterService.recordFailedAttempt(registerRateKey);
             log.warn("Registro rechazado: username ya existe={}", request.getUsername());
-            return ResponseEntity.badRequest().body("El usuario ya existe");
+            return ResponseEntity.badRequest().body("El usuario o email ya está registrado");
         }
 
         if (userRepository.existsByEmail(request.getEmail())) {
-            log.warn("Registro rechazado: email ya existe={}", request.getEmail());
-            return ResponseEntity.badRequest().body("El email ya está registrado");
+            rateLimiterService.recordFailedAttempt(registerRateKey);
+            log.warn("Registro rechazado: email ya existe");
+            return ResponseEntity.badRequest().body("El usuario o email ya está registrado");
         }
+
+        // Contabilizar creación para evitar spam masivo de cuentas desde la misma IP
+        rateLimiterService.recordFailedAttempt(registerRateKey);
 
         // Crear nuevo usuario
         User user = User.builder()
@@ -112,9 +134,14 @@ public class AuthController {
     })
     public ResponseEntity<?> login(@Valid @RequestBody AuthRequest request) {
         String clientIp = getClientIp();
-        if (rateLimiterService.isBlocked(clientIp)) {
-            long remaining = rateLimiterService.getRemainingBlockMinutes(clientIp);
-            log.warn("Login bloqueado para IP={} por exceso de intentos fallidos", clientIp);
+        String userKey = "user:" + request.getUsername().trim().toLowerCase();
+
+        if (rateLimiterService.isBlocked(clientIp) || rateLimiterService.isBlocked(userKey)) {
+            long remaining = Math.max(
+                    rateLimiterService.getRemainingBlockMinutes(clientIp),
+                    rateLimiterService.getRemainingBlockMinutes(userKey)
+            );
+            log.warn("Login bloqueado para IP={} username={} por exceso de intentos fallidos", clientIp, request.getUsername());
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                     .body("Demasiados intentos fallidos. Por favor intenta de nuevo en " + remaining + " minutos.");
         }
@@ -126,11 +153,13 @@ public class AuthController {
             );
         } catch (Exception e) {
             rateLimiterService.recordFailedAttempt(clientIp);
+            rateLimiterService.recordFailedAttempt(userKey);
             log.warn("Login fallido para username={}: {}", request.getUsername(), e.getMessage());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Usuario o contraseña incorrectos");
         }
 
         rateLimiterService.resetAttempts(clientIp);
+        rateLimiterService.resetAttempts(userKey);
 
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));

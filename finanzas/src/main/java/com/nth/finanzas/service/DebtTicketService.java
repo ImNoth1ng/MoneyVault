@@ -39,8 +39,8 @@ public class DebtTicketService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-        Debtor debtor = debtorRepository.findById(request.getDebtorId())
-                .orElseThrow(() -> new RuntimeException("Deudor no encontrado"));
+        Debtor debtor = debtorRepository.findByIdAndUserId(request.getDebtorId(), userId)
+                .orElseThrow(() -> new RuntimeException("Deudor no encontrado o no autorizado"));
 
         BigDecimal totalAmount = request.getItems().stream()
                 .map(item -> item.getAmount() != null ? item.getAmount() : BigDecimal.ZERO)
@@ -109,13 +109,6 @@ public class DebtTicketService {
                 .collect(Collectors.toList());
     }
 
-    public List<DebtTicketResponse> getTicketsByDebtorId(Long debtorId) {
-        return debtTicketRepository.findByDebtorId(debtorId)
-                .stream()
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
-    }
-
     public List<DebtTicketResponse> getTicketsByDebtorId(Long userId, Long debtorId) {
         debtorRepository.findByIdAndUserId(debtorId, userId)
                 .orElseThrow(() -> new RuntimeException("Deudor no encontrado o no autorizado"));
@@ -126,25 +119,10 @@ public class DebtTicketService {
                 .collect(Collectors.toList());
     }
 
-    public DebtTicketResponse getTicketById(Long ticketId) {
-        DebtTicket ticket = debtTicketRepository.findById(ticketId)
-                .orElseThrow(() -> new RuntimeException("Ticket no encontrado"));
-        return mapToResponse(ticket);
-    }
-
     public DebtTicketResponse getTicketById(Long userId, Long ticketId) {
         DebtTicket ticket = debtTicketRepository.findByIdAndUserId(ticketId, userId)
                 .orElseThrow(() -> new RuntimeException("Ticket no encontrado o no autorizado"));
         return mapToResponse(ticket);
-    }
-
-    public DebtTicketResponse markTicketAsPaid(Long ticketId) {
-        DebtTicket ticket = debtTicketRepository.findById(ticketId)
-                .orElseThrow(() -> new RuntimeException("Ticket no encontrado"));
-        boolean currentPaid = Boolean.TRUE.equals(ticket.getIsPaid());
-        ticket.setIsPaid(!currentPaid);
-        DebtTicket updatedTicket = debtTicketRepository.save(ticket);
-        return mapToResponse(updatedTicket);
     }
 
     public DebtTicketResponse markTicketAsPaid(Long userId, Long ticketId) {
@@ -211,10 +189,6 @@ public class DebtTicketService {
         transactionRepository.save(transaction);
 
         return mapToResponse(savedTicket);
-    }
-
-    public void deleteTicket(Long ticketId) {
-        debtTicketRepository.deleteById(ticketId);
     }
 
     public void deleteTicket(Long userId, Long ticketId) {
