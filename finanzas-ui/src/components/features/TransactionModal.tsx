@@ -23,7 +23,7 @@ import { formatCurrency } from '../../utils/formatters';
 
 interface TransactionModalProps {
   isOpen: boolean;
-  initialType?: 'EXPENSE' | 'INCOME' | 'TRANSFER';
+  initialType?: 'EXPENSE' | 'INCOME' | 'TRANSFER' | 'INVESTMENT';
   onClose: () => void;
   onSuccess: (message: string) => void;
 }
@@ -62,7 +62,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const { data: accounts = [] } = useAccounts();
   const createTxMutation = useCreateTransaction();
 
-  const [txType, setTxType] = useState<'EXPENSE' | 'INCOME' | 'TRANSFER'>(initialType);
+  const [txType, setTxType] = useState<'EXPENSE' | 'INCOME' | 'TRANSFER' | 'INVESTMENT'>(initialType);
   const [amount, setAmount] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [selectedAccountId, setSelectedAccountId] = useState<string | number>('');
@@ -80,14 +80,17 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const debitAccounts = activeAccounts.filter((a) => a.type === 'DEBIT');
   const cashAccounts = activeAccounts.filter((a) => a.type === 'CASH');
   const creditAccounts = activeAccounts.filter((a) => a.type === 'CREDIT' || String(a.type) === 'CREDIT_CARD');
-  const otherAccounts = activeAccounts.filter((a) => a.type !== 'DEBIT' && a.type !== 'CASH' && a.type !== 'CREDIT' && String(a.type) !== 'CREDIT_CARD');
+  const investmentAccounts = activeAccounts.filter((a) => a.type === 'INVESTMENT');
+  const otherAccounts = activeAccounts.filter(
+    (a) => a.type !== 'DEBIT' && a.type !== 'CASH' && a.type !== 'CREDIT' && String(a.type) !== 'CREDIT_CARD' && a.type !== 'INVESTMENT'
+  );
 
   useEffect(() => {
     if (isOpen) {
       setTxType(initialType);
       setAmount('');
-      setDescription('');
-      setCategory('');
+      setDescription(initialType === 'INVESTMENT' ? 'Fondeo de pool de inversión' : '');
+      setCategory(initialType === 'INVESTMENT' ? 'Inversión' : '');
       setCustomTag('');
       setSenderOption('myself');
       setSenderName('');
@@ -107,6 +110,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       } else if (initialType === 'INCOME') {
         const defaultAcc = debitAccounts[0] || cashAccounts[0] || activeAccounts[0];
         if (defaultAcc) setSelectedAccountId(defaultAcc.id);
+      } else if (initialType === 'INVESTMENT') {
+        const defaultOrigin = debitAccounts[0] || cashAccounts[0] || activeAccounts[0];
+        if (defaultOrigin) setSelectedAccountId(defaultOrigin.id);
+        if (investmentAccounts.length > 0) {
+          setDestinationAccountId(investmentAccounts[0].id);
+        }
       } else {
         if (activeAccounts.length > 0) setSelectedAccountId(activeAccounts[0].id);
         if (activeAccounts.length > 1) setDestinationAccountId(activeAccounts[1].id);
@@ -143,9 +152,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       return;
     }
 
-    if (txType === 'TRANSFER') {
+    if (txType === 'TRANSFER' || txType === 'INVESTMENT') {
       if (!destinationAccountId) {
-        setError('Debes seleccionar la cuenta a donde transferirás el dinero.');
+        setError(txType === 'INVESTMENT' ? 'Debes seleccionar el broker de inversión destino.' : 'Debes seleccionar la cuenta a donde transferirás el dinero.');
         return;
       }
       if (String(selectedAccountId) === String(destinationAccountId)) {
@@ -154,7 +163,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       }
     }
 
-    const finalTag = customTag.trim() ? customTag.trim() : category;
+    const finalTag = txType === 'INVESTMENT' ? (customTag.trim() || category || 'Inversión') : (customTag.trim() ? customTag.trim() : category);
     let senderOrRecipient: string | undefined = undefined;
 
     if (txType === 'INCOME') {
@@ -164,11 +173,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     try {
       await createTxMutation.mutateAsync({
         accountId: selectedAccountId,
-        destinationAccountId: txType === 'TRANSFER' ? destinationAccountId : null,
+        destinationAccountId: (txType === 'TRANSFER' || txType === 'INVESTMENT') ? destinationAccountId : null,
         amount: parsedAmount,
-        type: txType,
+        type: txType === 'INVESTMENT' ? 'TRANSFER' : txType,
         category: finalTag || undefined,
-        description: description.trim() || undefined,
+        description: description.trim() || (txType === 'INVESTMENT' ? 'Fondeo de cuenta de inversión' : undefined),
         senderOrRecipient: senderOrRecipient,
         transactionDate: transactionDate ? new Date(transactionDate).toISOString() : undefined,
       });
@@ -183,6 +192,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         }
       } else if (txType === 'INCOME') {
         successMsg = `Ingreso de ${formatCurrency(parsedAmount)} registrado y sumado a ${accName}.`;
+      } else if (txType === 'INVESTMENT') {
+        successMsg = `Fondeo exitoso: ${formatCurrency(parsedAmount)} enviados a ${destAccount?.name || 'tu broker'}. El dinero ya está en tu pool líquido disponible para operar.`;
       } else {
         successMsg = `Transferencia de ${formatCurrency(parsedAmount)} de ${accName} a ${destAccount?.name || 'cuenta destino'} realizada.`;
       }
@@ -207,21 +218,25 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   ? 'bg-rose-500/15 border-rose-500/30 text-rose-400'
                   : txType === 'INCOME'
                   ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                  : txType === 'INVESTMENT'
+                  ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
                   : 'bg-cyan-500/15 border-cyan-500/30 text-cyan-400'
               }`}
             >
               {txType === 'EXPENSE' && <TrendingDown className="w-6 h-6 stroke-[2.5]" />}
               {txType === 'INCOME' && <TrendingUp className="w-6 h-6 stroke-[2.5]" />}
               {txType === 'TRANSFER' && <ArrowLeftRight className="w-6 h-6 stroke-[2.5]" />}
+              {txType === 'INVESTMENT' && <TrendingUp className="w-6 h-6 stroke-[2.5]" />}
             </div>
             <div>
               <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block">
-                NUEVO MOVIMIENTO
+                {txType === 'INVESTMENT' ? 'FONDEO DE INVERSIÓN' : 'NUEVO MOVIMIENTO'}
               </span>
               <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
                 {txType === 'EXPENSE' && 'Registrar Gasto o Compra'}
                 {txType === 'INCOME' && 'Registrar Ingreso o Depósito'}
                 {txType === 'TRANSFER' && 'Registrar Transferencia entre Cuentas'}
+                {txType === 'INVESTMENT' && 'Mandar Dinero a Invertir (Fondeo Broker)'}
               </h2>
             </div>
           </div>
@@ -235,11 +250,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         </div>
 
         {/* Pestañas para cambiar tipo de movimiento */}
-        <div className="grid grid-cols-3 gap-2 p-1 bg-slate-900/90 rounded-2xl border border-slate-800">
+        <div className="grid grid-cols-4 gap-1.5 p-1 bg-slate-900/90 rounded-2xl border border-slate-800">
           <button
             type="button"
             onClick={() => setTxType('EXPENSE')}
-            className={`py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+            className={`py-2 px-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 ${
               txType === 'EXPENSE'
                 ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow'
                 : 'text-slate-400 hover:text-white'
@@ -251,7 +266,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           <button
             type="button"
             onClick={() => setTxType('INCOME')}
-            className={`py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+            className={`py-2 px-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 ${
               txType === 'INCOME'
                 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow'
                 : 'text-slate-400 hover:text-white'
@@ -263,14 +278,26 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           <button
             type="button"
             onClick={() => setTxType('TRANSFER')}
-            className={`py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+            className={`py-2 px-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 ${
               txType === 'TRANSFER'
                 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
             <ArrowLeftRight className="w-3.5 h-3.5" />
-            <span>Transferir</span>
+            <span>Traspaso</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTxType('INVESTMENT')}
+            className={`py-2 px-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 ${
+              txType === 'INVESTMENT'
+                ? 'bg-gradient-to-r from-emerald-500/25 to-cyan-500/25 text-emerald-300 border border-emerald-500/50 shadow'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Invertir</span>
           </button>
         </div>
 
@@ -487,6 +514,65 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           )}
 
+          {txType === 'INVESTMENT' && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    Cuenta Bancaria Origen (Sale dinero) *
+                  </label>
+                  <select
+                    value={selectedAccountId}
+                    onChange={(e) => setSelectedAccountId(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700/80 rounded-xl text-white text-xs font-semibold focus:outline-none focus:border-emerald-500 transition"
+                  >
+                    <option value="">-- Cuenta bancaria o débito --</option>
+                    {activeAccounts
+                      .filter((a) => a.type !== 'INVESTMENT')
+                      .map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name} ({a.type}) — Saldo: {formatCurrency(Number(a.currentBalance) || 0)}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    Broker / Cuenta de Inversión Destino *
+                  </label>
+                  <select
+                    value={destinationAccountId}
+                    onChange={(e) => setDestinationAccountId(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700/80 rounded-xl text-white text-xs font-semibold focus:outline-none focus:border-emerald-500 transition"
+                  >
+                    <option value="">-- Seleccionar Broker --</option>
+                    {investmentAccounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} (Líquido: {formatCurrency(Number(a.currentBalance) || 0)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {investmentAccounts.length === 0 && (
+                <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>Aún no tienes una cuenta de tipo INVERSIÓN (ej. GBM+, Bursanet, Cetesdirecto). Puedes crear una en la sección Cuentas o Inversiones.</span>
+                </div>
+              )}
+
+              {destAccount && (
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300">
+                  <span className="font-bold">Pool de liquidez:</span> Este dinero se sumará al efectivo disponible de <strong className="text-white">{destAccount.name}</strong> para comprar acciones o ETFs en el módulo de Inversiones.
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Descripción */}
           <div>
             <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
@@ -502,6 +588,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   ? 'Ej. Cena en restaurante, Pago de Spotify, Despensa...'
                   : txType === 'INCOME'
                   ? 'Ej. Depósito quincena, Transferencia de cliente...'
+                  : txType === 'INVESTMENT'
+                  ? 'Ej. Fondeo GBM para compra de acciones NVDA / VOO...'
                   : 'Ej. Traspaso a cuenta de ahorro...'
               }
               className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700/80 rounded-xl text-white text-xs font-medium focus:outline-none focus:border-emerald-500 transition"
@@ -509,7 +597,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           </div>
 
           {/* Categorías / Etiquetas Generales (No obligatorias) */}
-          {txType !== 'TRANSFER' && (
+          {txType !== 'TRANSFER' && txType !== 'INVESTMENT' && (
             <div>
               <div className="flex justify-between items-center mb-1.5">
                 <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
@@ -596,6 +684,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   ? 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white'
                   : txType === 'INCOME'
                   ? 'btn-emerald text-white'
+                  : txType === 'INVESTMENT'
+                  ? 'bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white'
                   : 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white'
               }`}
             >
@@ -607,6 +697,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                     {txType === 'EXPENSE' && `Registrar Gasto de ${formatCurrency(parsedAmount)}`}
                     {txType === 'INCOME' && `Registrar Ingreso de ${formatCurrency(parsedAmount)}`}
                     {txType === 'TRANSFER' && `Transferir ${formatCurrency(parsedAmount)}`}
+                    {txType === 'INVESTMENT' && `Mandar a Invertir ${formatCurrency(parsedAmount)}`}
                   </span>
                   <ArrowRight className="w-4 h-4" />
                 </>

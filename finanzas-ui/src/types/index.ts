@@ -234,3 +234,99 @@ export interface ValidationError {
   field: string;
   message: string;
 }
+
+// Interfaces de Inversiones
+export interface InvestmentHolding {
+  id: number;
+  accountId: number;
+  accountName?: string;
+  accountCurrency?: string;
+  symbol: string;
+  name: string;
+  quantity: number;
+  buyPrice: number;
+  totalInvested: number;
+  currency: string;
+  assetType?: string;
+  buyDate: string;
+  notes?: string;
+
+  // Cálculos y datos de mercado en vivo
+  currentPrice?: number;
+  currentValue?: number;
+  gainLoss?: number;
+  gainLossPercent?: number;
+  dailyChangePercent?: number;
+  currentValueInAccountCurrency?: number;
+  totalInvestedInAccountCurrency?: number;
+  gainLossInAccountCurrency?: number;
+  isQuoteLive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface InvestmentHoldingRequest {
+  accountId: number | string;
+  symbol: string;
+  name?: string;
+  quantity: number;
+  buyPrice: number;
+  currency?: string;
+  assetType?: string;
+  buyDate?: string;
+  notes?: string;
+  deductFromCash?: boolean;
+}
+
+export interface StockQuote {
+  symbol: string;
+  shortName?: string;
+  regularMarketPrice: number;
+  previousClose?: number;
+  change?: number;
+  changePercent?: number;
+  dayHigh?: number;
+  dayLow?: number;
+  currency?: string;
+  exchangeName?: string;
+  sparkline?: number[];
+  isLive: boolean;
+  fetchedAt?: string;
+}
+
+export interface AssetAllocation {
+  name: string;
+  symbol: string;
+  type: string;
+  valueMxn: number;
+  percentage: number;
+  color: string;
+}
+
+export interface BrokerSummary {
+  accountId: number;
+  accountName: string;
+  currency: string;
+  cashAvailable: number;
+  investedValue: number;
+  totalCost: number;
+  totalPortfolioValue: number;
+  gainLoss: number;
+  gainLossPercent: number;
+  holdingsCount: number;
+  holdings: InvestmentHolding[];
+}
+
+export interface PortfolioSummary {
+  totalPortfolioValueMxn: number;
+  totalCashAvailableMxn: number;
+  totalAssetsValueMxn: number;
+  totalCostBasisMxn: number;
+  totalGainLossMxn: number;
+  totalGainLossPercent: number;
+  usdToMxnRate: number;
+  lastUpdated: string;
+  brokers: BrokerSummary[];
+  allocation: AssetAllocation[];
+}
+

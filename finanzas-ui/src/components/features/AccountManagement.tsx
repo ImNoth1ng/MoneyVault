@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Plus, Trash2, CheckCircle2, AlertCircle, MoreVertical, DollarSign, Settings2, Banknote, CreditCard, Wallet, TrendingUp, Camera } from 'lucide-react';
+import { useSearchParams, Link } from 'react-router-dom';
+import { Plus, Trash2, CheckCircle2, AlertCircle, MoreVertical, DollarSign, Settings2, Banknote, CreditCard, Wallet, TrendingUp, Camera, ArrowRight } from 'lucide-react';
 import { ErrorMessage, LoadingSpinner } from '../common/Feedback';
 import { useAccounts, useCreateAccount, useUpdateAccount, useDeleteAccount, useCreateSnapshot } from '../../hooks/useAccounts';
 import { Account } from '../../types';
@@ -200,6 +200,29 @@ export const AccountManagement = () => {
           <span>Nueva Cuenta</span>
         </button>
       </div>
+
+      {activeTab === 'INVESTMENT' && (
+        <div className="glass-card border border-emerald-500/30 bg-emerald-950/20 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400">
+              <TrendingUp className="w-5 h-5 stroke-[2.5]" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-white">Módulo Avanzado de Inversiones Activo</h4>
+              <p className="text-[11px] text-slate-300">
+                Trackea tus acciones (NVDA, VOO, etc.), consulta precios en tiempo real y gestiona tu pool de liquidez disponible.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/inversiones"
+            className="px-3.5 py-2 btn-emerald text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 whitespace-nowrap self-end sm:self-auto shadow-md"
+          >
+            <span>Ir a Portafolio Bursátil</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      )}
 
       {/* Grid de Cuentas Filtradas */}
       {filteredAccounts.length === 0 ? (

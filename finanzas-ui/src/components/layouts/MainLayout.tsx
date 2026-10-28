@@ -23,7 +23,7 @@ export const MainLayout = () => {
     { icon: <Wallet className="w-5 h-5" />, label: 'Cuentas de Débito', shortLabel: 'Débito', href: '/accounts?type=DEBIT' },
     { icon: <CreditCard className="w-5 h-5" />, label: 'Tarjetas de Crédito', shortLabel: 'Crédito', href: '/accounts?type=CREDIT' },
     { icon: <Banknote className="w-5 h-5" />, label: 'Efectivo', shortLabel: 'Efectivo', href: '/accounts?type=CASH' },
-    { icon: <TrendingUp className="w-5 h-5" />, label: 'Inversiones', shortLabel: 'Inversiones', href: '/accounts?type=INVESTMENT' },
+    { icon: <TrendingUp className="w-5 h-5" />, label: 'Inversiones', shortLabel: 'Inversiones', href: '/inversiones' },
     { icon: <ArrowLeftRight className="w-5 h-5" />, label: 'Movimientos', shortLabel: 'Movimientos', href: '/movimientos' },
     { icon: <Users className="w-5 h-5" />, label: 'Deudores y Tickets', shortLabel: 'Deudores', href: '/debtors' },
     { icon: <Camera className="w-5 h-5" />, label: 'Snapshots e Histórico', shortLabel: 'Snapshots', href: '/snapshots' },

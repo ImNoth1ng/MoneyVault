@@ -5,6 +5,7 @@ import { LoadingSpinner } from '../common/Feedback';
 import { useAccounts, useAllSnapshots, useCreateGlobalSnapshot } from '../../hooks/useAccounts';
 import { useDebtors, useDebtTickets } from '../../hooks/useDebts';
 import { useTransactions } from '../../hooks/useTransactions';
+import { usePortfolioSummary } from '../../hooks/useInvestments';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { Link } from 'react-router-dom';
 
@@ -14,6 +15,7 @@ export const Dashboard = () => {
   const { data: tickets = [], isLoading: ticketsLoading } = useDebtTickets();
   const { data: snapshots = [], isLoading: snapshotsLoading } = useAllSnapshots();
   const { data: transactions = [] } = useTransactions();
+  const { data: portfolioSummary } = usePortfolioSummary();
 
   const createGlobalSnapshotMutation = useCreateGlobalSnapshot();
   const [showSnapshotModal, setShowSnapshotModal] = useState(false);
@@ -60,9 +62,11 @@ export const Dashboard = () => {
     return Number(b.id) - Number(a.id);
   });
 
-  // 4. INVERSIONES (Suma de saldos en cuentas de inversión)
+  // 4. INVERSIONES (Valor de portafolio consolidado: líquido + activos valorizados)
   const investmentAccounts = accounts.filter((a) => a.type === 'INVESTMENT' && a.active !== false);
-  const totalInvestmentBalance = investmentAccounts.reduce((sum, a) => sum + parseFloat(String(a.currentBalance || 0)), 0);
+  const totalInvestmentBalance = portfolioSummary?.totalPortfolioValueMxn !== undefined
+    ? Number(portfolioSummary.totalPortfolioValueMxn)
+    : investmentAccounts.reduce((sum, a) => sum + parseFloat(String(a.currentBalance || 0)), 0);
 
   // 5. DINERO LIBRE (Liquidez + Pendiente por Cobrar - Deudas Crédito)
   const dineroLibre = (totalLiquidityDebit + totalPendingReceivable) - creditDebtTotal;
@@ -264,50 +268,60 @@ export const Dashboard = () => {
       </div>
 
       {/* 📊 TARJETAS SECUNDARIAS DESGLOSADAS */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <div className="glass-card rounded-2xl p-5 border border-slate-800 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-emerald-400">Dinero Total en Liquidez</p>
-            <p className="text-2xl font-black text-white mt-1">{formatCurrency(totalLiquidityDebit)}</p>
-            <p className="text-[10px] text-slate-400 mt-1 font-semibold">{liquidityAccounts.length} cuenta(s) en liquidez (débito y efectivo)</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="glass-card rounded-2xl p-4 sm:p-5 border border-slate-800 flex items-center justify-between">
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 truncate">Dinero Total en Liquidez</p>
+            <p className="text-xl sm:text-2xl font-black text-white truncate">{formatCurrency(totalLiquidityDebit)}</p>
+            <p className="text-[10px] text-slate-400 font-semibold truncate">{liquidityAccounts.length} cuenta(s) en liquidez</p>
           </div>
-          <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-xl">
+          <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-xl flex-shrink-0 ml-2">
             <Banknote className="w-6 h-6" />
           </div>
         </div>
 
-        <div className="glass-card rounded-2xl p-5 border border-slate-800 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-rose-400">Deuda Tarjetas Crédito</p>
-            <p className="text-2xl font-black text-rose-300 mt-1">{formatCurrency(creditDebtTotal)}</p>
-            <p className="text-[10px] text-rose-400/80 mt-1 font-semibold">{creditAccounts.length} tarjeta(s) ocupadas</p>
+        <div className="glass-card rounded-2xl p-4 sm:p-5 border border-slate-800 flex items-center justify-between">
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-xs font-bold uppercase tracking-wider text-rose-400 truncate">Deuda Tarjetas Crédito</p>
+            <p className="text-xl sm:text-2xl font-black text-rose-300 truncate">{formatCurrency(creditDebtTotal)}</p>
+            <p className="text-[10px] text-rose-400/80 font-semibold truncate">{creditAccounts.length} tarjeta(s) ocupadas</p>
           </div>
-          <div className="p-3 bg-rose-500/15 border border-rose-500/30 text-rose-400 rounded-xl">
+          <div className="p-3 bg-rose-500/15 border border-rose-500/30 text-rose-400 rounded-xl flex-shrink-0 ml-2">
             <CreditCard className="w-6 h-6" />
           </div>
         </div>
 
-        <div className="glass-card rounded-2xl p-5 border border-slate-800 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-cyan-400">Por Cobrar (Tickets)</p>
-            <p className="text-2xl font-black text-white mt-1">{formatCurrency(totalPendingReceivable)}</p>
-            <p className="text-[10px] text-slate-400 mt-1 font-semibold">{pendingTickets.length} ticket(s) pendientes</p>
+        <div className="glass-card rounded-2xl p-4 sm:p-5 border border-slate-800 flex items-center justify-between">
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-xs font-bold uppercase tracking-wider text-cyan-400 truncate">Por Cobrar (Tickets)</p>
+            <p className="text-xl sm:text-2xl font-black text-white truncate">{formatCurrency(totalPendingReceivable)}</p>
+            <p className="text-[10px] text-slate-400 font-semibold truncate">{pendingTickets.length} ticket(s) pendientes</p>
           </div>
-          <div className="p-3 bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 rounded-xl">
+          <div className="p-3 bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 rounded-xl flex-shrink-0 ml-2">
             <FileText className="w-6 h-6" />
           </div>
         </div>
 
-        <div className="glass-card rounded-2xl p-5 border border-slate-800 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-emerald-400">Dinero en Inversiones</p>
-            <p className="text-2xl font-black text-white mt-1">{formatCurrency(totalInvestmentBalance)}</p>
-            <p className="text-[10px] text-slate-400 mt-1 font-semibold">{investmentAccounts.length} cuenta(s) de inversión</p>
+        <Link
+          to="/inversiones"
+          className="glass-card rounded-2xl p-4 sm:p-5 border border-slate-800 flex items-center justify-between hover:border-emerald-500/40 transition group cursor-pointer"
+        >
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 group-hover:text-emerald-300 flex items-center gap-1 transition truncate">
+              <span>Dinero en Inversiones</span>
+              <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0" />
+            </p>
+            <p className="text-xl sm:text-2xl font-black text-white truncate">{formatCurrency(totalInvestmentBalance)}</p>
+            <p className="text-[10px] text-slate-400 font-semibold truncate">
+              {portfolioSummary && portfolioSummary.brokers && portfolioSummary.brokers.length > 0
+                ? `${portfolioSummary.brokers.length} broker(s) • Rend: ${portfolioSummary.totalGainLossPercent >= 0 ? '+' : ''}${portfolioSummary.totalGainLossPercent?.toFixed(1)}%`
+                : `${investmentAccounts.length} cuenta(s) de inversión`}
+            </p>
           </div>
-          <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-xl">
+          <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-xl group-hover:scale-110 transition flex-shrink-0 ml-2">
             <TrendingUp className="w-6 h-6" />
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* Tablas Principales */}

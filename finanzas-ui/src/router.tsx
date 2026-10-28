@@ -10,6 +10,7 @@ import AccountsPage from './pages/AccountsPage';
 import DebtorsPage from './pages/DebtorsPage';
 import { SnapshotsPage } from './pages/SnapshotsPage';
 import TransactionsPage from './pages/TransactionsPage';
+import InvestmentsPage from './pages/InvestmentsPage';
 
 // Protected Route Wrapper
 const ProtectedRoute = () => {
@@ -75,6 +76,14 @@ export const router = createBrowserRouter([
                     {
                         path: 'transactions',
                         element: <Navigate to="/movimientos" replace />,
+                    },
+                    {
+                        path: 'inversiones',
+                        element: <InvestmentsPage />,
+                    },
+                    {
+                        path: 'investments',
+                        element: <Navigate to="/inversiones" replace />,
                     },
                     {
                         path: 'snapshots',

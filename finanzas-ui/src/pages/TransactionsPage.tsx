@@ -40,14 +40,14 @@ export const TransactionsPage = () => {
 
   // Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalInitialType, setModalInitialType] = useState<'EXPENSE' | 'INCOME' | 'TRANSFER'>('EXPENSE');
+  const [modalInitialType, setModalInitialType] = useState<'EXPENSE' | 'INCOME' | 'TRANSFER' | 'INVESTMENT'>('EXPENSE');
 
   const triggerFeedback = (type: 'success' | 'error', message: string) => {
     setFeedback({ type, message });
     setTimeout(() => setFeedback(null), 4000);
   };
 
-  const handleOpenModal = (type: 'EXPENSE' | 'INCOME' | 'TRANSFER') => {
+  const handleOpenModal = (type: 'EXPENSE' | 'INCOME' | 'TRANSFER' | 'INVESTMENT') => {
     setModalInitialType(type);
     setIsModalOpen(true);
   };
@@ -245,6 +245,15 @@ export const TransactionsPage = () => {
           >
             <ArrowLeftRight className="w-4 h-4 text-cyan-400" />
             <span className="hidden sm:inline">Transferir</span>
+          </button>
+
+          <button
+            onClick={() => handleOpenModal('INVESTMENT')}
+            className="px-3.5 py-2.5 bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-lg shadow-emerald-950/30"
+            title="Mandar dinero al pool de inversión"
+          >
+            <TrendingUp className="w-4 h-4 stroke-[3]" />
+            <span>Mandar a Invertir</span>
           </button>
         </div>
       </div>
@@ -592,6 +601,7 @@ export const TransactionsPage = () => {
                   const isExpense = tx.type === 'EXPENSE';
                   const isIncome = tx.type === 'INCOME';
                   const isTransfer = tx.type === 'TRANSFER';
+                  const isInvestment = isTransfer && (tx.destinationAccountType === 'INVESTMENT' || tx.category === 'Inversión');
                   const isCredit = tx.accountType === 'CREDIT';
                   const amountNum = Number(tx.amount) || 0;
 
@@ -609,12 +619,15 @@ export const TransactionsPage = () => {
                                 ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
                                 : isIncome
                                 ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                : isInvestment
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow'
                                 : 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
                             }`}
                           >
                             {isExpense && <ArrowDownLeft className="w-4 h-4" />}
                             {isIncome && <ArrowUpRight className="w-4 h-4" />}
-                            {isTransfer && <ArrowLeftRight className="w-4 h-4" />}
+                            {isTransfer && !isInvestment && <ArrowLeftRight className="w-4 h-4" />}
+                            {isInvestment && <TrendingUp className="w-4 h-4 stroke-[2.5]" />}
                           </div>
                           <span
                             className={`text-[10px] font-black uppercase tracking-wider ${
@@ -622,10 +635,12 @@ export const TransactionsPage = () => {
                                 ? 'text-rose-400'
                                 : isIncome
                                 ? 'text-emerald-400'
+                                : isInvestment
+                                ? 'text-emerald-300'
                                 : 'text-cyan-400'
                             }`}
                           >
-                            {isExpense ? 'Gasto' : isIncome ? 'Ingreso' : 'Traspaso'}
+                            {isExpense ? 'Gasto' : isIncome ? 'Ingreso' : isInvestment ? 'Inversión' : 'Traspaso'}
                           </span>
                         </div>
                       </td>

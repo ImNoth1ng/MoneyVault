@@ -42,6 +42,8 @@ export const useUpdateAccount = () => {
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
       queryClient.invalidateQueries({ queryKey: ['account', variables.id] });
       queryClient.invalidateQueries({ queryKey: ['balance-snapshots'] });
+      queryClient.invalidateQueries({ queryKey: ['investments'] });
+      queryClient.invalidateQueries({ queryKey: ['investments-summary'] });
     },
   });
 };
