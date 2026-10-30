@@ -1,5 +1,10 @@
 import apiClient from '../lib/apiClient';
-import { Transaction, TransactionRequest } from '../types';
+import {
+  Transaction,
+  TransactionRequest,
+  RecurringTransaction,
+  RecurringTransactionRequest,
+} from '../types';
 
 const client = apiClient.getClient();
 
@@ -23,7 +28,36 @@ export const transactionService = {
     return data;
   },
 
+  update: async (id: string | number, transaction: TransactionRequest): Promise<Transaction> => {
+    const { data } = await client.put<Transaction>(`/transactions/${id}`, transaction);
+    return data;
+  },
+
   delete: async (id: string | number): Promise<void> => {
     await client.delete(`/transactions/${id}`);
+  },
+};
+
+export const recurringTransactionService = {
+  getAll: async (): Promise<RecurringTransaction[]> => {
+    const { data } = await client.get<RecurringTransaction[]>('/recurring-transactions');
+    return data;
+  },
+
+  create: async (request: RecurringTransactionRequest): Promise<RecurringTransaction> => {
+    const { data } = await client.post<RecurringTransaction>('/recurring-transactions', request);
+    return data;
+  },
+
+  update: async (
+    id: string | number,
+    request: RecurringTransactionRequest
+  ): Promise<RecurringTransaction> => {
+    const { data } = await client.put<RecurringTransaction>(`/recurring-transactions/${id}`, request);
+    return data;
+  },
+
+  delete: async (id: string | number): Promise<void> => {
+    await client.delete(`/recurring-transactions/${id}`);
   },
 };

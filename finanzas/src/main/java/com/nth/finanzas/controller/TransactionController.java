@@ -62,6 +62,21 @@ public class TransactionController {
         return ResponseEntity.ok(response);
     }
 
+    @PutMapping("/{id}")
+    @Operation(summary = "Actualizar movimiento financiero", description = "Edita un movimiento existente, revirtiendo el impacto anterior y recalculando los saldos de las cuentas involucradas.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Movimiento actualizado con éxito"),
+        @ApiResponse(responseCode = "400", description = "Datos inválidos"),
+        @ApiResponse(responseCode = "404", description = "Movimiento no encontrado")
+    })
+    public ResponseEntity<TransactionResponse> updateTransaction(
+            @PathVariable Long id,
+            @Valid @RequestBody TransactionRequest request) {
+        Long userId = SecurityUtil.getCurrentUserId();
+        TransactionResponse response = transactionService.updateTransaction(userId, id, request);
+        return ResponseEntity.ok(response);
+    }
+
     @DeleteMapping("/{id}")
     @Operation(summary = "Eliminar movimiento", description = "Elimina un movimiento y revierte de forma automática sus efectos en los saldos y deudas de las cuentas involucradas.")
     @ApiResponses({

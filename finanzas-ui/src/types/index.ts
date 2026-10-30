@@ -133,6 +133,36 @@ export interface TransactionRequest {
   transactionDate?: string;
 }
 
+export interface RecurringTransaction {
+  id: number | string;
+  userId?: number | string;
+  name: string;
+  accountId: number | string;
+  accountName?: string;
+  accountType?: string;
+  destinationAccountId?: number | string | null;
+  destinationAccountName?: string | null;
+  destinationAccountType?: string | null;
+  amount: number | string;
+  type: 'EXPENSE' | 'INCOME' | 'TRANSFER' | string;
+  category?: string;
+  description?: string;
+  senderOrRecipient?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface RecurringTransactionRequest {
+  name: string;
+  accountId: number | string;
+  destinationAccountId?: number | string | null;
+  amount: number;
+  type: 'EXPENSE' | 'INCOME' | 'TRANSFER';
+  category?: string;
+  description?: string;
+  senderOrRecipient?: string;
+}
+
 export interface TicketPaymentRequest {
   accountId: string | number;
   amountReceived: number;

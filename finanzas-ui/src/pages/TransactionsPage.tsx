@@ -6,7 +6,6 @@ import {
   Plus,
   Search,
   Tag,
-  Filter,
   Trash2,
   Calendar,
   AlertCircle,
@@ -18,38 +17,139 @@ import {
   ArrowUpRight,
   ChevronLeft,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Repeat,
+  Pencil,
+  Zap,
+  SlidersHorizontal,
 } from 'lucide-react';
-import { useTransactions, useDeleteTransaction } from '../hooks/useTransactions';
+import {
+  useTransactions,
+  useCreateTransaction,
+  useDeleteTransaction,
+  useRecurringTransactions,
+  useDeleteRecurringTransaction,
+} from '../hooks/useTransactions';
 import { useAccounts } from '../hooks/useAccounts';
 import { TransactionModal } from '../components/features/TransactionModal';
+import { RecurringTransactionModal } from '../components/features/RecurringTransactionModal';
 import { formatCurrency, formatDate } from '../utils/formatters';
-import { Transaction } from '../types';
+import { Transaction, RecurringTransaction } from '../types';
 
 export const TransactionsPage = () => {
   const { data: transactions = [], isLoading, error } = useTransactions();
   const { data: accounts = [] } = useAccounts();
+  const { data: recurringTransactions = [], isLoading: isLoadingRecurring } =
+    useRecurringTransactions();
+
+  const createTxMutation = useCreateTransaction();
   const deleteTxMutation = useDeleteTransaction();
+  const deleteRecurringMutation = useDeleteRecurringTransaction();
 
   // Estados de control y filtros
   const [activeTab, setActiveTab] = useState<'ALL' | 'EXPENSE' | 'INCOME' | 'TRANSFER'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<string>('ALL');
   const [selectedAccountId, setSelectedAccountId] = useState<string>('ALL');
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(
+    null
+  );
+  const [quickApplyingId, setQuickApplyingId] = useState<string | number | null>(null);
 
-  // Modal
+  // Modal de Movimientos (Crear / Editar / Rellenar desde Recurrente)
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalInitialType, setModalInitialType] = useState<'EXPENSE' | 'INCOME' | 'TRANSFER' | 'INVESTMENT'>('EXPENSE');
+  const [modalInitialType, setModalInitialType] = useState<
+    'EXPENSE' | 'INCOME' | 'TRANSFER' | 'INVESTMENT'
+  >('EXPENSE');
+  const [transactionToEdit, setTransactionToEdit] = useState<Transaction | null>(null);
+  const [prefillRecurring, setPrefillRecurring] = useState<RecurringTransaction | null>(null);
+
+  // Modal de Movimientos Recurrentes (Crear / Editar plantilla)
+  const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false);
+  const [recurringToEdit, setRecurringToEdit] = useState<RecurringTransaction | null>(null);
 
   const triggerFeedback = (type: 'success' | 'error', message: string) => {
     setFeedback({ type, message });
     setTimeout(() => setFeedback(null), 4000);
   };
 
-  const handleOpenModal = (type: 'EXPENSE' | 'INCOME' | 'TRANSFER' | 'INVESTMENT') => {
+  const handleOpenCreateModal = (
+    type: 'EXPENSE' | 'INCOME' | 'TRANSFER' | 'INVESTMENT'
+  ) => {
+    setTransactionToEdit(null);
+    setPrefillRecurring(null);
     setModalInitialType(type);
     setIsModalOpen(true);
+  };
+
+  const handleOpenEditTransaction = (tx: Transaction) => {
+    setPrefillRecurring(null);
+    setTransactionToEdit(tx);
+    setIsModalOpen(true);
+  };
+
+  const handleUseAndAdjustRecurring = (rec: RecurringTransaction) => {
+    setTransactionToEdit(null);
+    setPrefillRecurring(rec);
+    setIsModalOpen(true);
+  };
+
+  const handleQuickApplyRecurring = async (rec: RecurringTransaction) => {
+    const amountNum = Number(rec.amount) || 0;
+    if (amountNum <= 0) {
+      handleUseAndAdjustRecurring(rec);
+      return;
+    }
+
+    setQuickApplyingId(rec.id);
+    try {
+      await createTxMutation.mutateAsync({
+        accountId: rec.accountId,
+        destinationAccountId: rec.destinationAccountId ?? null,
+        amount: amountNum,
+        type: (rec.type as 'EXPENSE' | 'INCOME' | 'TRANSFER') || 'EXPENSE',
+        category: rec.category || undefined,
+        description: rec.description || rec.name,
+        senderOrRecipient: rec.senderOrRecipient || undefined,
+        transactionDate: new Date().toISOString(),
+      });
+      triggerFeedback(
+        'success',
+        `Movimiento recurrente "${rec.name}" (${formatCurrency(amountNum)}) registrado en ${rec.accountName || 'tu cuenta'}.`
+      );
+    } catch (err: any) {
+      triggerFeedback(
+        'error',
+        err.response?.data?.message || 'Error al aplicar el movimiento recurrente.'
+      );
+    } finally {
+      setQuickApplyingId(null);
+    }
+  };
+
+  const handleOpenCreateRecurring = () => {
+    setRecurringToEdit(null);
+    setIsRecurringModalOpen(true);
+  };
+
+  const handleOpenEditRecurring = (rec: RecurringTransaction) => {
+    setRecurringToEdit(rec);
+    setIsRecurringModalOpen(true);
+  };
+
+  const handleDeleteRecurring = async (rec: RecurringTransaction) => {
+    if (!window.confirm(`¿Eliminar el movimiento recurrente "${rec.name}"?`)) {
+      return;
+    }
+    try {
+      await deleteRecurringMutation.mutateAsync(rec.id);
+      triggerFeedback('success', `Movimiento recurrente "${rec.name}" eliminado.`);
+    } catch (err: any) {
+      triggerFeedback(
+        'error',
+        err.response?.data?.message || 'Error al eliminar el movimiento recurrente.'
+      );
+    }
   };
 
   const handleDelete = async (tx: Transaction) => {
@@ -65,13 +165,20 @@ export const TransactionsPage = () => {
       impactText = 'Se restaurarán los saldos de ambas cuentas involucradas.';
     }
 
-    if (!window.confirm(`¿Eliminar este movimiento de ${formatCurrency(Number(tx.amount) || 0)}?\n\n${impactText}`)) {
+    if (
+      !window.confirm(
+        `¿Eliminar este movimiento de ${formatCurrency(Number(tx.amount) || 0)}?\n\n${impactText}`
+      )
+    ) {
       return;
     }
 
     try {
       await deleteTxMutation.mutateAsync(tx.id);
-      triggerFeedback('success', 'Movimiento eliminado y saldos de cuentas restaurados exitosamente.');
+      triggerFeedback(
+        'success',
+        'Movimiento eliminado y saldos de cuentas restaurados exitosamente.'
+      );
     } catch (err: any) {
       triggerFeedback('error', err.response?.data?.message || 'Error al eliminar movimiento.');
     }
@@ -211,36 +318,38 @@ export const TransactionsPage = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Movimientos</h1>
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              Movimientos
+            </h1>
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">
               Control de Flujo
             </span>
           </div>
           <p className="text-slate-400 text-xs sm:text-sm mt-0.5 font-medium">
-            Registro detallado de gastos, compras, ingresos, depósitos y transferencias
+            Registro detallado de gastos, compras, ingresos, depósitos, transferencias y recurrentes
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => handleOpenModal('EXPENSE')}
-            className="px-4 py-2.5 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-lg shadow-rose-950/30"
+            onClick={() => handleOpenCreateModal('EXPENSE')}
+            className="px-4 py-2.5 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-lg shadow-rose-950/30 active:scale-[0.98]"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>Nuevo Gasto</span>
           </button>
 
           <button
-            onClick={() => handleOpenModal('INCOME')}
-            className="px-4 py-2.5 btn-emerald rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-lg shadow-emerald-950/30"
+            onClick={() => handleOpenCreateModal('INCOME')}
+            className="px-4 py-2.5 btn-emerald rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-lg shadow-emerald-950/30 active:scale-[0.98]"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>Nuevo Ingreso</span>
           </button>
 
           <button
-            onClick={() => handleOpenModal('TRANSFER')}
-            className="px-3.5 py-2.5 bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+            onClick={() => handleOpenCreateModal('TRANSFER')}
+            className="px-3.5 py-2.5 bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25 rounded-xl text-xs font-bold transition flex items-center gap-1.5 active:scale-[0.98]"
             title="Transferir entre cuentas propias"
           >
             <ArrowLeftRight className="w-4 h-4 text-cyan-400" />
@@ -248,8 +357,8 @@ export const TransactionsPage = () => {
           </button>
 
           <button
-            onClick={() => handleOpenModal('INVESTMENT')}
-            className="px-3.5 py-2.5 bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-lg shadow-emerald-950/30"
+            onClick={() => handleOpenCreateModal('INVESTMENT')}
+            className="px-3.5 py-2.5 bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-lg shadow-emerald-950/30 active:scale-[0.98]"
             title="Mandar dinero al pool de inversión"
           >
             <TrendingUp className="w-4 h-4 stroke-[3]" />
@@ -275,7 +384,185 @@ export const TransactionsPage = () => {
         </div>
       )}
 
-      {/* 📅 BARRA SELECTORA DE MES (FILTRO MENSUAL / HISTÓRICO) */}
+      {/* SECCIÓN DE MOVIMIENTOS RECURRENTES (PLANTILLAS DE 1 CLIC O RELLENADO AUTOMÁTICO) */}
+      <div className="glass-card rounded-2xl p-4 sm:p-5 border border-slate-800 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400">
+              <Repeat className="w-4 h-4 stroke-[2.5]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-black text-white tracking-tight">
+                  Movimientos Recurrentes y Frecuentes
+                </h2>
+                <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                  {recurringTransactions.length} configurados
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 font-medium">
+                Registra con 1 clic tus pagos fijos (ej. Metro) o rellena los campos automáticamente para ajustar solo el monto (ej. Nómina).
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleOpenCreateRecurring}
+            className="px-3.5 py-2 bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 self-start sm:self-auto active:scale-[0.98]"
+          >
+            <Plus className="w-3.5 h-3.5 stroke-[3]" />
+            <span>Nuevo Recurrente</span>
+          </button>
+        </div>
+
+        {isLoadingRecurring ? (
+          <div className="text-xs text-slate-400 font-semibold py-2">
+            Cargando movimientos recurrentes...
+          </div>
+        ) : recurringTransactions.length === 0 ? (
+          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <p className="text-xs text-slate-400 font-medium">
+              Aún no tienes movimientos recurrentes guardados. Crea plantillas para tus gastos diarios (como transporte o suscripciones) o ingresos frecuentes (como tu nómina).
+            </p>
+            <button
+              onClick={handleOpenCreateRecurring}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 flex-shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Crear mi primer recurrente</span>
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {recurringTransactions.map((rec) => {
+              const isExpense = rec.type === 'EXPENSE';
+              const isIncome = rec.type === 'INCOME';
+              const isTransfer = rec.type === 'TRANSFER';
+              const isInvestment =
+                isTransfer &&
+                (rec.destinationAccountType === 'INVESTMENT' || rec.category === 'Inversión');
+              const recAmount = Number(rec.amount) || 0;
+              const isApplying = quickApplyingId === rec.id;
+
+              return (
+                <div
+                  key={rec.id}
+                  className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition flex flex-col justify-between gap-3 group"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <div
+                        className={`p-2 rounded-xl flex-shrink-0 mt-0.5 ${
+                          isExpense
+                            ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                            : isIncome
+                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
+                        }`}
+                      >
+                        {isExpense && <ArrowDownLeft className="w-4 h-4" />}
+                        {isIncome && <ArrowUpRight className="w-4 h-4" />}
+                        {isTransfer && !isInvestment && <ArrowLeftRight className="w-4 h-4" />}
+                        {isInvestment && <TrendingUp className="w-4 h-4" />}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="text-xs font-black text-white truncate">{rec.name}</h3>
+                          {rec.category && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                              {rec.category}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-semibold truncate mt-0.5">
+                          {rec.accountName || `Cuenta #${rec.accountId}`}
+                          {isTransfer && rec.destinationAccountName
+                            ? ` → ${rec.destinationAccountName}`
+                            : ''}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-right flex-shrink-0">
+                      <span
+                        className={`font-mono font-black text-sm block ${
+                          isExpense
+                            ? 'text-rose-400'
+                            : isIncome
+                            ? 'text-emerald-400'
+                            : 'text-cyan-400'
+                        }`}
+                      >
+                        {isExpense
+                          ? `-${formatCurrency(recAmount)}`
+                          : isIncome
+                          ? `+${formatCurrency(recAmount)}`
+                          : formatCurrency(recAmount)}
+                      </span>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                        Predefinido
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Botones de Acción del Recurrente */}
+                  <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-slate-800/80">
+                    <div className="flex items-center gap-1.5 flex-1">
+                      <button
+                        type="button"
+                        disabled={isApplying}
+                        onClick={() => handleQuickApplyRecurring(rec)}
+                        className={`flex-1 py-1.5 px-2.5 rounded-xl text-[11px] font-black transition flex items-center justify-center gap-1 active:scale-[0.98] disabled:opacity-50 ${
+                          isExpense
+                            ? 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40'
+                            : isIncome
+                            ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40'
+                            : 'bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40'
+                        }`}
+                        title="Registrar inmediatamente con el monto predefinido"
+                      >
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>{isApplying ? 'Aplicando...' : 'Registrar Ya'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleUseAndAdjustRecurring(rec)}
+                        className="py-1.5 px-2.5 rounded-xl text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1 active:scale-[0.98]"
+                        title="Abrir formulario con todos los datos rellenados para ajustar el monto o fecha"
+                      >
+                        <SlidersHorizontal className="w-3 h-3 text-cyan-400" />
+                        <span>Ajustar</span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditRecurring(rec)}
+                        className="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-lg transition"
+                        title="Editar plantilla recurrente"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteRecurring(rec)}
+                        className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition"
+                        title="Eliminar plantilla recurrente"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* BARRA SELECTORA DE MES (FILTRO MENSUAL / HISTÓRICO) */}
       <div className="glass-card rounded-2xl p-4 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-900/60 shadow-lg backdrop-blur-md">
         <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
           <button
@@ -342,17 +629,21 @@ export const TransactionsPage = () => {
         </div>
       </div>
 
-      {/* 📊 TARJETAS KPI DE RESUMEN FINANCIERO (Calculadas para el Mes Seleccionado) */}
+      {/* TARJETAS KPI DE RESUMEN FINANCIERO (Calculadas para el Mes Seleccionado) */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         {/* Total Gastos */}
         <div className="glass-card rounded-2xl p-5 border border-slate-800 flex items-center justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-rose-400">
-              Total Gastos {selectedMonth === 'ALL' ? 'Histórico' : `(${formatMonthName(selectedMonth)})`}
+              Total Gastos{' '}
+              {selectedMonth === 'ALL' ? 'Histórico' : `(${formatMonthName(selectedMonth)})`}
             </p>
-            <p className="text-2xl font-black text-rose-300 mt-1">{formatCurrency(totalExpenses)}</p>
+            <p className="text-2xl font-mono font-black text-rose-300 mt-1">
+              {formatCurrency(totalExpenses)}
+            </p>
             <p className="text-[10px] text-slate-400 mt-0.5 font-semibold">
-              {monthTransactions.filter((t) => t.type === 'EXPENSE').length} gasto(s) en {selectedMonth === 'ALL' ? 'histórico' : formatMonthName(selectedMonth)}
+              {monthTransactions.filter((t) => t.type === 'EXPENSE').length} gasto(s) en{' '}
+              {selectedMonth === 'ALL' ? 'histórico' : formatMonthName(selectedMonth)}
             </p>
           </div>
           <div className="p-3 bg-rose-500/15 border border-rose-500/30 text-rose-400 rounded-xl">
@@ -364,9 +655,12 @@ export const TransactionsPage = () => {
         <div className="glass-card rounded-2xl p-5 border border-slate-800 flex items-center justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
-              Total Ingresos {selectedMonth === 'ALL' ? 'Histórico' : `(${formatMonthName(selectedMonth)})`}
+              Total Ingresos{' '}
+              {selectedMonth === 'ALL' ? 'Histórico' : `(${formatMonthName(selectedMonth)})`}
             </p>
-            <p className="text-2xl font-black text-emerald-300 mt-1">{formatCurrency(totalIncomes)}</p>
+            <p className="text-2xl font-mono font-black text-emerald-300 mt-1">
+              {formatCurrency(totalIncomes)}
+            </p>
             <p className="text-[10px] text-slate-400 mt-0.5 font-semibold">
               {monthTransactions.filter((t) => t.type === 'INCOME').length} depósito(s) o abonos
             </p>
@@ -380,10 +674,11 @@ export const TransactionsPage = () => {
         <div className="glass-card rounded-2xl p-5 border border-slate-800 flex items-center justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-cyan-400">
-              Flujo Neto {selectedMonth === 'ALL' ? 'Histórico' : `(${formatMonthName(selectedMonth)})`}
+              Flujo Neto{' '}
+              {selectedMonth === 'ALL' ? 'Histórico' : `(${formatMonthName(selectedMonth)})`}
             </p>
             <p
-              className={`text-2xl font-black mt-1 ${
+              className={`text-2xl font-mono font-black mt-1 ${
                 netFlow >= 0 ? 'text-emerald-400' : 'text-rose-400'
               }`}
             >
@@ -402,9 +697,12 @@ export const TransactionsPage = () => {
         <div className="glass-card rounded-2xl p-5 border border-slate-800 flex items-center justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Movimientos {selectedMonth === 'ALL' ? 'Histórico' : `(${formatMonthName(selectedMonth)})`}
+              Movimientos{' '}
+              {selectedMonth === 'ALL' ? 'Histórico' : `(${formatMonthName(selectedMonth)})`}
             </p>
-            <p className="text-2xl font-black text-white mt-1">{monthTransactions.length}</p>
+            <p className="text-2xl font-mono font-black text-white mt-1">
+              {monthTransactions.length}
+            </p>
             <p className="text-[10px] text-slate-400 mt-0.5 font-semibold">
               Registros en el periodo
             </p>
@@ -415,7 +713,7 @@ export const TransactionsPage = () => {
         </div>
       </div>
 
-      {/* 🔍 BARRA DE FILTROS Y CONTROLES */}
+      {/* BARRA DE FILTROS Y CONTROLES */}
       <div className="glass-card p-4 sm:p-5 rounded-2xl border border-slate-800 space-y-4">
         {/* Pestañas Principales (Todos, Gastos, Ingresos, Transferencias) */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
@@ -461,13 +759,17 @@ export const TransactionsPage = () => {
               }`}
             >
               <ArrowLeftRight className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Transferencias ({monthTransactions.filter((t) => t.type === 'TRANSFER').length})</span>
+              <span>
+                Transferencias ({monthTransactions.filter((t) => t.type === 'TRANSFER').length})
+              </span>
             </button>
           </div>
 
           {/* Filtro por Cuenta */}
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold text-slate-400 uppercase hidden md:inline">Cuenta:</span>
+            <span className="text-[11px] font-bold text-slate-400 uppercase hidden md:inline">
+              Cuenta:
+            </span>
             <select
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
@@ -532,7 +834,7 @@ export const TransactionsPage = () => {
         </div>
       </div>
 
-      {/* 📋 LISTADO DE MOVIMIENTOS */}
+      {/* LISTADO DE MOVIMIENTOS */}
       {isLoading ? (
         <div className="glass-card p-12 text-center rounded-2xl border border-slate-800 text-slate-400 text-xs font-bold">
           Cargando movimientos...
@@ -553,27 +855,31 @@ export const TransactionsPage = () => {
             {transactions.length === 0
               ? 'Empieza registrando tus gastos diarios o tus ingresos para tener el control total de tus cuentas y dinero libre.'
               : monthTransactions.length === 0 && selectedMonth !== 'ALL'
-              ? `Aún no has registrado gastos ni ingresos en este mes (${formatMonthName(selectedMonth)}). Puedes registrar uno nuevo o consultar otro periodo.`
+              ? `Aún no has registrado gastos ni ingresos en este mes (${formatMonthName(
+                  selectedMonth
+                )}). Puedes registrar uno nuevo o consultar otro periodo.`
               : 'No se encontraron movimientos que coincidan con los filtros seleccionados.'}
           </p>
           <div className="flex items-center justify-center gap-3 pt-2 flex-wrap">
-            {monthTransactions.length === 0 && selectedMonth !== 'ALL' && transactions.length > 0 && (
-              <button
-                onClick={() => setSelectedMonth('ALL')}
-                className="px-4 py-2 bg-slate-800 border border-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition"
-              >
-                Ver Todo el Histórico ({transactions.length})
-              </button>
-            )}
+            {monthTransactions.length === 0 &&
+              selectedMonth !== 'ALL' &&
+              transactions.length > 0 && (
+                <button
+                  onClick={() => setSelectedMonth('ALL')}
+                  className="px-4 py-2 bg-slate-800 border border-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition"
+                >
+                  Ver Todo el Histórico ({transactions.length})
+                </button>
+              )}
             <button
-              onClick={() => handleOpenModal('EXPENSE')}
+              onClick={() => handleOpenCreateModal('EXPENSE')}
               className="px-4 py-2 bg-rose-500/20 border border-rose-500/40 text-rose-300 hover:bg-rose-500/30 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
             >
               <TrendingDown className="w-3.5 h-3.5" />
               <span>Registrar Gasto</span>
             </button>
             <button
-              onClick={() => handleOpenModal('INCOME')}
+              onClick={() => handleOpenCreateModal('INCOME')}
               className="px-4 py-2 btn-emerald rounded-xl text-xs font-bold transition flex items-center gap-1.5"
             >
               <TrendingUp className="w-3.5 h-3.5" />
@@ -601,15 +907,14 @@ export const TransactionsPage = () => {
                   const isExpense = tx.type === 'EXPENSE';
                   const isIncome = tx.type === 'INCOME';
                   const isTransfer = tx.type === 'TRANSFER';
-                  const isInvestment = isTransfer && (tx.destinationAccountType === 'INVESTMENT' || tx.category === 'Inversión');
+                  const isInvestment =
+                    isTransfer &&
+                    (tx.destinationAccountType === 'INVESTMENT' || tx.category === 'Inversión');
                   const isCredit = tx.accountType === 'CREDIT';
                   const amountNum = Number(tx.amount) || 0;
 
                   return (
-                    <tr
-                      key={tx.id}
-                      className="hover:bg-slate-800/40 transition group"
-                    >
+                    <tr key={tx.id} className="hover:bg-slate-800/40 transition group">
                       {/* Tipo Icono */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-2">
@@ -640,7 +945,13 @@ export const TransactionsPage = () => {
                                 : 'text-cyan-400'
                             }`}
                           >
-                            {isExpense ? 'Gasto' : isIncome ? 'Ingreso' : isInvestment ? 'Inversión' : 'Traspaso'}
+                            {isExpense
+                              ? 'Gasto'
+                              : isIncome
+                              ? 'Ingreso'
+                              : isInvestment
+                              ? 'Inversión'
+                              : 'Traspaso'}
                           </span>
                         </div>
                       </td>
@@ -648,7 +959,12 @@ export const TransactionsPage = () => {
                       {/* Descripción y Remitente */}
                       <td className="py-3.5 px-4">
                         <p className="font-extrabold text-white text-xs">
-                          {tx.description || (isExpense ? 'Gasto registrado' : isIncome ? 'Ingreso registrado' : 'Transferencia')}
+                          {tx.description ||
+                            (isExpense
+                              ? 'Gasto registrado'
+                              : isIncome
+                              ? 'Ingreso registrado'
+                              : 'Transferencia')}
                         </p>
                         {tx.senderOrRecipient && (
                           <p className="text-[11px] text-slate-400 font-medium flex items-center gap-1 mt-0.5">
@@ -666,7 +982,9 @@ export const TransactionsPage = () => {
                       {/* Cuenta / Origen */}
                       <td className="py-3.5 px-4">
                         <div className="flex flex-col">
-                          <span className="font-bold text-slate-200">{tx.accountName || `Cuenta #${tx.accountId}`}</span>
+                          <span className="font-bold text-slate-200">
+                            {tx.accountName || `Cuenta #${tx.accountId}`}
+                          </span>
                           {isTransfer && tx.destinationAccountName && (
                             <span className="text-[10px] text-cyan-400 font-semibold flex items-center gap-1 mt-0.5">
                               → {tx.destinationAccountName}
@@ -691,7 +1009,9 @@ export const TransactionsPage = () => {
 
                       {/* Fecha */}
                       <td className="py-3.5 px-4 text-slate-300 font-medium text-[11px] whitespace-nowrap">
-                        {tx.transactionDate ? formatDate(tx.transactionDate) : formatDate(tx.createdAt || '')}
+                        {tx.transactionDate
+                          ? formatDate(tx.transactionDate)
+                          : formatDate(tx.createdAt || '')}
                       </td>
 
                       {/* Monto */}
@@ -705,19 +1025,32 @@ export const TransactionsPage = () => {
                               : 'text-cyan-400'
                           }`}
                         >
-                          {isExpense ? `-${formatCurrency(amountNum)}` : isIncome ? `+${formatCurrency(amountNum)}` : formatCurrency(amountNum)}
+                          {isExpense
+                            ? `-${formatCurrency(amountNum)}`
+                            : isIncome
+                            ? `+${formatCurrency(amountNum)}`
+                            : formatCurrency(amountNum)}
                         </span>
                       </td>
 
-                      {/* Acciones */}
+                      {/* Acciones: Editar y Eliminar */}
                       <td className="py-3.5 px-4 text-center">
-                        <button
-                          onClick={() => handleDelete(tx)}
-                          className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition"
-                          title="Eliminar movimiento y revertir saldos"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => handleOpenEditTransaction(tx)}
+                            className="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-xl transition"
+                            title="Editar movimiento y ajustar saldos"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(tx)}
+                            className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition"
+                            title="Eliminar movimiento y revertir saldos"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -728,11 +1061,28 @@ export const TransactionsPage = () => {
         </div>
       )}
 
-      {/* Modal para Crear Movimiento */}
+      {/* Modal para Crear / Editar Movimiento */}
       <TransactionModal
         isOpen={isModalOpen}
         initialType={modalInitialType}
-        onClose={() => setIsModalOpen(false)}
+        transactionToEdit={transactionToEdit}
+        prefillRecurring={prefillRecurring}
+        onClose={() => {
+          setIsModalOpen(false);
+          setTransactionToEdit(null);
+          setPrefillRecurring(null);
+        }}
+        onSuccess={(msg) => triggerFeedback('success', msg)}
+      />
+
+      {/* Modal para Crear / Editar Movimiento Recurrente */}
+      <RecurringTransactionModal
+        isOpen={isRecurringModalOpen}
+        recurringToEdit={recurringToEdit}
+        onClose={() => {
+          setIsRecurringModalOpen(false);
+          setRecurringToEdit(null);
+        }}
         onSuccess={(msg) => triggerFeedback('success', msg)}
       />
     </div>

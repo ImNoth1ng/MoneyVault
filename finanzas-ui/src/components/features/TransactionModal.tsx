@@ -12,18 +12,25 @@ import {
   TrendingUp,
   ArrowLeftRight,
   AlertCircle,
-  CreditCard,
-  Banknote,
   Wallet,
-  Sparkles
+  Repeat,
+  Pencil,
 } from 'lucide-react';
 import { useAccounts } from '../../hooks/useAccounts';
-import { useCreateTransaction } from '../../hooks/useTransactions';
+import {
+  useCreateTransaction,
+  useUpdateTransaction,
+  useRecurringTransactions,
+  useCreateRecurringTransaction,
+} from '../../hooks/useTransactions';
 import { formatCurrency } from '../../utils/formatters';
+import { Transaction, RecurringTransaction } from '../../types';
 
 interface TransactionModalProps {
   isOpen: boolean;
   initialType?: 'EXPENSE' | 'INCOME' | 'TRANSFER' | 'INVESTMENT';
+  transactionToEdit?: Transaction | null;
+  prefillRecurring?: RecurringTransaction | null;
   onClose: () => void;
   onSuccess: (message: string) => void;
 }
@@ -39,7 +46,7 @@ const COMMON_EXPENSE_TAGS = [
   'Compras',
   'Educación',
   'Hogar',
-  'Otro'
+  'Otro',
 ];
 
 const COMMON_INCOME_TAGS = [
@@ -50,17 +57,24 @@ const COMMON_INCOME_TAGS = [
   'Rendimientos',
   'Regalo',
   'Reembolso',
-  'Otro'
+  'Otro',
 ];
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
   isOpen,
   initialType = 'EXPENSE',
+  transactionToEdit = null,
+  prefillRecurring = null,
   onClose,
   onSuccess,
 }) => {
   const { data: accounts = [] } = useAccounts();
+  const { data: recurringList = [] } = useRecurringTransactions();
   const createTxMutation = useCreateTransaction();
+  const updateTxMutation = useUpdateTransaction();
+  const createRecurringMutation = useCreateRecurringTransaction();
+
+  const isEditing = Boolean(transactionToEdit);
 
   const [txType, setTxType] = useState<'EXPENSE' | 'INCOME' | 'TRANSFER' | 'INVESTMENT'>(initialType);
   const [amount, setAmount] = useState<string>('');
@@ -72,6 +86,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [senderOption, setSenderOption] = useState<'myself' | 'other'>('myself');
   const [senderName, setSenderName] = useState<string>('');
   const [transactionDate, setTransactionDate] = useState<string>('');
+  const [saveAsRecurring, setSaveAsRecurring] = useState<boolean>(false);
+  const [recurringName, setRecurringName] = useState<string>('');
+  const [activeRecurringId, setActiveRecurringId] = useState<string | number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const activeAccounts = accounts.filter((a) => a.active !== false);
@@ -79,14 +96,115 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   // Cuentas agrupadas para mayor claridad
   const debitAccounts = activeAccounts.filter((a) => a.type === 'DEBIT');
   const cashAccounts = activeAccounts.filter((a) => a.type === 'CASH');
-  const creditAccounts = activeAccounts.filter((a) => a.type === 'CREDIT' || String(a.type) === 'CREDIT_CARD');
+  const creditAccounts = activeAccounts.filter(
+    (a) => a.type === 'CREDIT' || String(a.type) === 'CREDIT_CARD'
+  );
   const investmentAccounts = activeAccounts.filter((a) => a.type === 'INVESTMENT');
   const otherAccounts = activeAccounts.filter(
-    (a) => a.type !== 'DEBIT' && a.type !== 'CASH' && a.type !== 'CREDIT' && String(a.type) !== 'CREDIT_CARD' && a.type !== 'INVESTMENT'
+    (a) =>
+      a.type !== 'DEBIT' &&
+      a.type !== 'CASH' &&
+      a.type !== 'CREDIT' &&
+      String(a.type) !== 'CREDIT_CARD' &&
+      a.type !== 'INVESTMENT'
   );
 
+  const toLocalDateTimeInput = (isoStr?: string) => {
+    const d = isoStr ? new Date(isoStr) : new Date();
+    const validDate = isNaN(d.getTime()) ? new Date() : d;
+    return new Date(validDate.getTime() - validDate.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16);
+  };
+
+  const applyRecurringTemplate = (rec: RecurringTransaction) => {
+    const isInv =
+      rec.type === 'TRANSFER' &&
+      (rec.destinationAccountType === 'INVESTMENT' || rec.category === 'Inversión');
+    const resolvedType: 'EXPENSE' | 'INCOME' | 'TRANSFER' | 'INVESTMENT' = isInv
+      ? 'INVESTMENT'
+      : (rec.type as 'EXPENSE' | 'INCOME' | 'TRANSFER') || 'EXPENSE';
+
+    setActiveRecurringId(rec.id);
+    setTxType(resolvedType);
+    setAmount(String(rec.amount || ''));
+    setDescription(rec.description || rec.name || '');
+    setSelectedAccountId(rec.accountId || '');
+    setDestinationAccountId(rec.destinationAccountId || '');
+
+    const cat = rec.category || '';
+    const commonList = resolvedType === 'EXPENSE' ? COMMON_EXPENSE_TAGS : COMMON_INCOME_TAGS;
+    if (commonList.includes(cat)) {
+      setCategory(cat);
+      setCustomTag('');
+    } else {
+      setCategory('');
+      setCustomTag(cat);
+    }
+
+    if (!rec.senderOrRecipient || rec.senderOrRecipient === 'Yo mismo (Fondos propios)') {
+      setSenderOption('myself');
+      setSenderName('');
+    } else {
+      setSenderOption('other');
+      setSenderName(rec.senderOrRecipient);
+    }
+  };
+
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return;
+    setError(null);
+    setSaveAsRecurring(false);
+    setRecurringName('');
+
+    if (transactionToEdit) {
+      // Modo Edición de un movimiento existente
+      const isInv =
+        transactionToEdit.type === 'TRANSFER' &&
+        (transactionToEdit.destinationAccountType === 'INVESTMENT' ||
+          transactionToEdit.category === 'Inversión');
+      const resolvedType: 'EXPENSE' | 'INCOME' | 'TRANSFER' | 'INVESTMENT' = isInv
+        ? 'INVESTMENT'
+        : (transactionToEdit.type as 'EXPENSE' | 'INCOME' | 'TRANSFER') || 'EXPENSE';
+
+      setActiveRecurringId(null);
+      setTxType(resolvedType);
+      setAmount(String(transactionToEdit.amount || ''));
+      setDescription(transactionToEdit.description || '');
+      setSelectedAccountId(transactionToEdit.accountId || '');
+      setDestinationAccountId(transactionToEdit.destinationAccountId || '');
+
+      const cat = transactionToEdit.category || '';
+      const commonList = resolvedType === 'EXPENSE' ? COMMON_EXPENSE_TAGS : COMMON_INCOME_TAGS;
+      if (commonList.includes(cat)) {
+        setCategory(cat);
+        setCustomTag('');
+      } else {
+        setCategory('');
+        setCustomTag(cat);
+      }
+
+      if (
+        !transactionToEdit.senderOrRecipient ||
+        transactionToEdit.senderOrRecipient === 'Yo mismo (Fondos propios)'
+      ) {
+        setSenderOption('myself');
+        setSenderName('');
+      } else {
+        setSenderOption('other');
+        setSenderName(transactionToEdit.senderOrRecipient);
+      }
+
+      setTransactionDate(
+        toLocalDateTimeInput(transactionToEdit.transactionDate || transactionToEdit.createdAt)
+      );
+    } else if (prefillRecurring) {
+      // Modo pre-llenado desde un movimiento recurrente
+      setTransactionDate(toLocalDateTimeInput());
+      applyRecurringTemplate(prefillRecurring);
+    } else {
+      // Modo creación limpia
+      setActiveRecurringId(null);
       setTxType(initialType);
       setAmount('');
       setDescription(initialType === 'INVESTMENT' ? 'Fondeo de pool de inversión' : '');
@@ -94,18 +212,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setCustomTag('');
       setSenderOption('myself');
       setSenderName('');
-      setError(null);
+      setTransactionDate(toLocalDateTimeInput());
 
-      // Fecha y hora local
-      const now = new Date();
-      const localIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
-        .toISOString()
-        .slice(0, 16);
-      setTransactionDate(localIso);
-
-      // Selección predeterminada de cuenta
       if (initialType === 'EXPENSE') {
-        const defaultAcc = debitAccounts[0] || cashAccounts[0] || creditAccounts[0] || activeAccounts[0];
+        const defaultAcc =
+          debitAccounts[0] || cashAccounts[0] || creditAccounts[0] || activeAccounts[0];
         if (defaultAcc) setSelectedAccountId(defaultAcc.id);
       } else if (initialType === 'INCOME') {
         const defaultAcc = debitAccounts[0] || cashAccounts[0] || activeAccounts[0];
@@ -121,13 +232,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         if (activeAccounts.length > 1) setDestinationAccountId(activeAccounts[1].id);
       }
     }
-  }, [isOpen, initialType, accounts]);
+  }, [isOpen, initialType, transactionToEdit, prefillRecurring, accounts]);
 
   if (!isOpen) return null;
 
   const parsedAmount = parseFloat(amount) || 0;
   const currentAccount = activeAccounts.find((a) => String(a.id) === String(selectedAccountId));
   const destAccount = activeAccounts.find((a) => String(a.id) === String(destinationAccountId));
+  const isSubmitting = createTxMutation.isPending || updateTxMutation.isPending;
 
   const handleSelectTag = (tag: string) => {
     if (category === tag) {
@@ -154,7 +266,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
     if (txType === 'TRANSFER' || txType === 'INVESTMENT') {
       if (!destinationAccountId) {
-        setError(txType === 'INVESTMENT' ? 'Debes seleccionar el broker de inversión destino.' : 'Debes seleccionar la cuenta a donde transferirás el dinero.');
+        setError(
+          txType === 'INVESTMENT'
+            ? 'Debes seleccionar el broker de inversión destino.'
+            : 'Debes seleccionar la cuenta a donde transferirás el dinero.'
+        );
         return;
       }
       if (String(selectedAccountId) === String(destinationAccountId)) {
@@ -163,42 +279,91 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       }
     }
 
-    const finalTag = txType === 'INVESTMENT' ? (customTag.trim() || category || 'Inversión') : (customTag.trim() ? customTag.trim() : category);
-    let senderOrRecipient: string | undefined = undefined;
+    const finalTag =
+      txType === 'INVESTMENT'
+        ? customTag.trim() || category || 'Inversión'
+        : customTag.trim()
+        ? customTag.trim()
+        : category;
 
+    let senderOrRecipient: string | undefined = undefined;
     if (txType === 'INCOME') {
-      senderOrRecipient = senderOption === 'myself' ? 'Yo mismo (Fondos propios)' : (senderName.trim() || 'Alguien más');
+      senderOrRecipient =
+        senderOption === 'myself'
+          ? 'Yo mismo (Fondos propios)'
+          : senderName.trim() || 'Alguien más';
     }
 
-    try {
-      await createTxMutation.mutateAsync({
-        accountId: selectedAccountId,
-        destinationAccountId: (txType === 'TRANSFER' || txType === 'INVESTMENT') ? destinationAccountId : null,
-        amount: parsedAmount,
-        type: txType === 'INVESTMENT' ? 'TRANSFER' : txType,
-        category: finalTag || undefined,
-        description: description.trim() || (txType === 'INVESTMENT' ? 'Fondeo de cuenta de inversión' : undefined),
-        senderOrRecipient: senderOrRecipient,
-        transactionDate: transactionDate ? new Date(transactionDate).toISOString() : undefined,
-      });
+    const payload = {
+      accountId: selectedAccountId,
+      destinationAccountId:
+        txType === 'TRANSFER' || txType === 'INVESTMENT' ? destinationAccountId : null,
+      amount: parsedAmount,
+      type: (txType === 'INVESTMENT' ? 'TRANSFER' : txType) as 'EXPENSE' | 'INCOME' | 'TRANSFER',
+      category: finalTag || undefined,
+      description:
+        description.trim() ||
+        (txType === 'INVESTMENT' ? 'Fondeo de cuenta de inversión' : undefined),
+      senderOrRecipient: senderOrRecipient,
+      debtTicketId: transactionToEdit?.debtTicketId ?? null,
+      transactionDate: transactionDate ? new Date(transactionDate).toISOString() : undefined,
+    };
 
-      const accName = currentAccount?.name || 'tu cuenta';
-      let successMsg = '';
-      if (txType === 'EXPENSE') {
-        if (currentAccount?.type === 'CREDIT') {
-          successMsg = `Gasto de ${formatCurrency(parsedAmount)} registrado. Se sumó a la deuda de ${accName}.`;
-        } else {
-          successMsg = `Gasto de ${formatCurrency(parsedAmount)} registrado. Se restó del saldo de ${accName}.`;
-        }
-      } else if (txType === 'INCOME') {
-        successMsg = `Ingreso de ${formatCurrency(parsedAmount)} registrado y sumado a ${accName}.`;
-      } else if (txType === 'INVESTMENT') {
-        successMsg = `Fondeo exitoso: ${formatCurrency(parsedAmount)} enviados a ${destAccount?.name || 'tu broker'}. El dinero ya está en tu pool líquido disponible para operar.`;
+    try {
+      if (isEditing && transactionToEdit) {
+        await updateTxMutation.mutateAsync({
+          id: transactionToEdit.id,
+          data: payload,
+        });
+        onSuccess(
+          `Movimiento actualizado a ${formatCurrency(parsedAmount)}. Los saldos de tus cuentas se ajustaron automáticamente.`
+        );
       } else {
-        successMsg = `Transferencia de ${formatCurrency(parsedAmount)} de ${accName} a ${destAccount?.name || 'cuenta destino'} realizada.`;
+        await createTxMutation.mutateAsync(payload);
+
+        // Si el usuario marcó guardar también como movimiento recurrente
+        if (saveAsRecurring) {
+          const recTitle =
+            recurringName.trim() ||
+            description.trim() ||
+            finalTag ||
+            (txType === 'EXPENSE' ? 'Gasto Recurrente' : 'Ingreso Recurrente');
+          await createRecurringMutation.mutateAsync({
+            name: recTitle,
+            accountId: selectedAccountId,
+            destinationAccountId:
+              txType === 'TRANSFER' || txType === 'INVESTMENT' ? destinationAccountId : null,
+            amount: parsedAmount,
+            type: payload.type,
+            category: finalTag || undefined,
+            description: payload.description || recTitle,
+            senderOrRecipient,
+          });
+        }
+
+        const accName = currentAccount?.name || 'tu cuenta';
+        let successMsg = '';
+        if (txType === 'EXPENSE') {
+          if (currentAccount?.type === 'CREDIT') {
+            successMsg = `Gasto de ${formatCurrency(parsedAmount)} registrado. Se sumó a la deuda de ${accName}.`;
+          } else {
+            successMsg = `Gasto de ${formatCurrency(parsedAmount)} registrado. Se restó del saldo de ${accName}.`;
+          }
+        } else if (txType === 'INCOME') {
+          successMsg = `Ingreso de ${formatCurrency(parsedAmount)} registrado y sumado a ${accName}.`;
+        } else if (txType === 'INVESTMENT') {
+          successMsg = `Fondeo exitoso: ${formatCurrency(parsedAmount)} enviados a ${destAccount?.name || 'tu broker'}.`;
+        } else {
+          successMsg = `Transferencia de ${formatCurrency(parsedAmount)} de ${accName} a ${destAccount?.name || 'cuenta destino'} realizada.`;
+        }
+
+        if (saveAsRecurring) {
+          successMsg += ' Además se guardó en tus Movimientos Recurrentes.';
+        }
+
+        onSuccess(successMsg);
       }
 
-      onSuccess(successMsg);
       onClose();
     } catch (err: any) {
       setError(err.response?.data?.message || err.message || 'Error al guardar el movimiento.');
@@ -208,7 +373,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const modalContent = (
     <div className="fixed inset-0 z-[99999] bg-[#0b0f19]/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
       <div className="w-full max-w-lg bg-[#0f172a] border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 my-auto relative">
-        
         {/* Cabecera */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-3">
@@ -223,20 +387,37 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   : 'bg-cyan-500/15 border-cyan-500/30 text-cyan-400'
               }`}
             >
-              {txType === 'EXPENSE' && <TrendingDown className="w-6 h-6 stroke-[2.5]" />}
-              {txType === 'INCOME' && <TrendingUp className="w-6 h-6 stroke-[2.5]" />}
-              {txType === 'TRANSFER' && <ArrowLeftRight className="w-6 h-6 stroke-[2.5]" />}
-              {txType === 'INVESTMENT' && <TrendingUp className="w-6 h-6 stroke-[2.5]" />}
+              {isEditing ? (
+                <Pencil className="w-6 h-6 stroke-[2.5]" />
+              ) : (
+                <>
+                  {txType === 'EXPENSE' && <TrendingDown className="w-6 h-6 stroke-[2.5]" />}
+                  {txType === 'INCOME' && <TrendingUp className="w-6 h-6 stroke-[2.5]" />}
+                  {txType === 'TRANSFER' && <ArrowLeftRight className="w-6 h-6 stroke-[2.5]" />}
+                  {txType === 'INVESTMENT' && <TrendingUp className="w-6 h-6 stroke-[2.5]" />}
+                </>
+              )}
             </div>
             <div>
               <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block">
-                {txType === 'INVESTMENT' ? 'FONDEO DE INVERSIÓN' : 'NUEVO MOVIMIENTO'}
+                {isEditing
+                  ? 'EDITAR MOVIMIENTO EXISTENTE'
+                  : activeRecurringId
+                  ? 'MOVIMIENTO RECURRENTE PRECARGADO'
+                  : txType === 'INVESTMENT'
+                  ? 'FONDEO DE INVERSIÓN'
+                  : 'NUEVO MOVIMIENTO'}
               </span>
               <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
-                {txType === 'EXPENSE' && 'Registrar Gasto o Compra'}
-                {txType === 'INCOME' && 'Registrar Ingreso o Depósito'}
-                {txType === 'TRANSFER' && 'Registrar Transferencia entre Cuentas'}
-                {txType === 'INVESTMENT' && 'Mandar Dinero a Invertir (Fondeo Broker)'}
+                {isEditing
+                  ? 'Modificar Movimiento y Ajustar Saldo'
+                  : txType === 'EXPENSE'
+                  ? 'Registrar Gasto o Compra'
+                  : txType === 'INCOME'
+                  ? 'Registrar Ingreso o Depósito'
+                  : txType === 'TRANSFER'
+                  ? 'Registrar Transferencia entre Cuentas'
+                  : 'Mandar Dinero a Invertir (Fondeo Broker)'}
               </h2>
             </div>
           </div>
@@ -248,6 +429,52 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Barra de Autocompletado Rápido con Movimientos Recurrentes (solo al crear) */}
+        {!isEditing && recurringList.length > 0 && (
+          <div className="p-3 bg-slate-900/90 border border-slate-800 rounded-2xl space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+                <Repeat className="w-3.5 h-3.5" />
+                <span>Rellenar con Movimiento Recurrente:</span>
+              </span>
+              {activeRecurringId && (
+                <span className="text-[10px] font-bold text-emerald-400">
+                  Datos rellenados — ajusta el monto si varió
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none]">
+              {recurringList.map((rec) => {
+                const isSelected = String(activeRecurringId) === String(rec.id);
+                const isExp = rec.type === 'EXPENSE';
+                const isInc = rec.type === 'INCOME';
+                return (
+                  <button
+                    key={rec.id}
+                    type="button"
+                    onClick={() => applyRecurringTemplate(rec)}
+                    className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition flex items-center gap-1.5 flex-shrink-0 border ${
+                      isSelected
+                        ? 'bg-cyan-500/20 text-cyan-200 border-cyan-500/50 shadow'
+                        : 'bg-slate-950/80 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        isExp ? 'bg-rose-400' : isInc ? 'bg-emerald-400' : 'bg-cyan-400'
+                      }`}
+                    />
+                    <span>{rec.name}</span>
+                    <span className="font-mono text-[10px] text-slate-400">
+                      ({formatCurrency(Number(rec.amount) || 0)})
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Pestañas para cambiar tipo de movimiento */}
         <div className="grid grid-cols-4 gap-1.5 p-1 bg-slate-900/90 rounded-2xl border border-slate-800">
@@ -309,7 +536,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          
           {/* Monto Grande */}
           <div>
             <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
@@ -317,7 +543,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               <span>Monto *</span>
             </label>
             <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-lg">$</span>
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-lg">
+                $
+              </span>
               <input
                 type="number"
                 step="any"
@@ -346,7 +574,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700/80 rounded-xl text-white text-xs font-semibold focus:outline-none focus:border-rose-500 transition"
               >
                 <option value="">-- Seleccionar cuenta de pago --</option>
-                
+
                 {debitAccounts.length > 0 && (
                   <optgroup label="Cuentas de Débito (Se restará del saldo)">
                     {debitAccounts.map((a) => (
@@ -389,15 +617,22 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               </select>
 
               {/* Explicación en tiempo real */}
-              {currentAccount && (
+              {currentAccount && !isEditing && (
                 <div className="mt-2 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-[11px] text-slate-300 font-medium">
                   {currentAccount.type === 'CREDIT' ? (
                     <span className="text-rose-300">
-                      <strong>Tarjeta de Crédito:</strong> Al registrar este gasto de {formatCurrency(parsedAmount)}, la deuda aumentará automáticamente a {formatCurrency((Number(currentAccount.currentBalance) || 0) + parsedAmount)}.
+                      <strong>Tarjeta de Crédito:</strong> Al registrar este gasto de{' '}
+                      {formatCurrency(parsedAmount)}, la deuda aumentará automáticamente a{' '}
+                      {formatCurrency((Number(currentAccount.currentBalance) || 0) + parsedAmount)}.
                     </span>
                   ) : (
                     <span className="text-emerald-300">
-                      <strong>{currentAccount.type === 'CASH' ? 'Efectivo' : 'Cuenta de Débito'}:</strong> Al registrar este gasto, el saldo disponible pasará de {formatCurrency(Number(currentAccount.currentBalance) || 0)} a {formatCurrency((Number(currentAccount.currentBalance) || 0) - parsedAmount)}.
+                      <strong>
+                        {currentAccount.type === 'CASH' ? 'Efectivo' : 'Cuenta de Débito'}:
+                      </strong>{' '}
+                      Al registrar este gasto, el saldo disponible pasará de{' '}
+                      {formatCurrency(Number(currentAccount.currentBalance) || 0)} a{' '}
+                      {formatCurrency((Number(currentAccount.currentBalance) || 0) - parsedAmount)}.
                     </span>
                   )}
                 </div>
@@ -421,7 +656,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   <option value="">-- Seleccionar cuenta destino --</option>
                   {activeAccounts.map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.name} ({a.type}) — Saldo actual: {formatCurrency(Number(a.currentBalance) || 0)}
+                      {a.name} ({a.type}) — Saldo actual:{' '}
+                      {formatCurrency(Number(a.currentBalance) || 0)}
                     </option>
                   ))}
                 </select>
@@ -532,7 +768,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       .filter((a) => a.type !== 'INVESTMENT')
                       .map((a) => (
                         <option key={a.id} value={a.id}>
-                          {a.name} ({a.type}) — Saldo: {formatCurrency(Number(a.currentBalance) || 0)}
+                          {a.name} ({a.type}) — Saldo:{' '}
+                          {formatCurrency(Number(a.currentBalance) || 0)}
                         </option>
                       ))}
                   </select>
@@ -561,13 +798,18 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               {investmentAccounts.length === 0 && (
                 <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-semibold flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  <span>Aún no tienes una cuenta de tipo INVERSIÓN (ej. GBM+, Bursanet, Cetesdirecto). Puedes crear una en la sección Cuentas o Inversiones.</span>
+                  <span>
+                    Aún no tienes una cuenta de tipo INVERSIÓN (ej. GBM+, Bursanet, Cetesdirecto).
+                    Puedes crear una en la sección Cuentas o Inversiones.
+                  </span>
                 </div>
               )}
 
               {destAccount && (
                 <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300">
-                  <span className="font-bold">Pool de liquidez:</span> Este dinero se sumará al efectivo disponible de <strong className="text-white">{destAccount.name}</strong> para comprar acciones o ETFs en el módulo de Inversiones.
+                  <span className="font-bold">Pool de liquidez:</span> Este dinero se sumará al
+                  efectivo disponible de <strong className="text-white">{destAccount.name}</strong>{' '}
+                  para comprar acciones o ETFs en el módulo de Inversiones.
                 </div>
               )}
             </div>
@@ -585,7 +827,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               onChange={(e) => setDescription(e.target.value)}
               placeholder={
                 txType === 'EXPENSE'
-                  ? 'Ej. Cena en restaurante, Pago de Spotify, Despensa...'
+                  ? 'Ej. Pago de Metro, Cena en restaurante, Spotify...'
                   : txType === 'INCOME'
                   ? 'Ej. Depósito quincena, Transferencia de cliente...'
                   : txType === 'INVESTMENT'
@@ -666,19 +908,47 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             />
           </div>
 
+          {/* Opción para guardar como Movimiento Recurrente (solo al crear uno nuevo y cuando no viene de uno ya existente) */}
+          {!isEditing && !activeRecurringId && (
+            <div className="p-3 bg-slate-900/70 border border-slate-800 rounded-2xl space-y-2">
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={saveAsRecurring}
+                  onChange={(e) => setSaveAsRecurring(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-0"
+                />
+                <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <Repeat className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Guardar también como Movimiento Recurrente (para próximas veces)</span>
+                </span>
+              </label>
+
+              {saveAsRecurring && (
+                <input
+                  type="text"
+                  value={recurringName}
+                  onChange={(e) => setRecurringName(e.target.value)}
+                  placeholder="Nombre corto para el botón rápido (ej. Metro, Nómina, Netflix)..."
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-xl text-white text-xs font-medium focus:outline-none focus:border-cyan-500 transition"
+                />
+              )}
+            </div>
+          )}
+
           {/* Botones de Acción */}
           <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-800">
             <button
               type="button"
               onClick={onClose}
-              disabled={createTxMutation.isPending}
+              disabled={isSubmitting}
               className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              disabled={createTxMutation.isPending}
+              disabled={isSubmitting}
               className={`px-5 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 shadow-lg disabled:opacity-50 ${
                 txType === 'EXPENSE'
                   ? 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white'
@@ -689,8 +959,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   : 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white'
               }`}
             >
-              {createTxMutation.isPending ? (
-                <span>Guardando movimiento...</span>
+              {isSubmitting ? (
+                <span>Guardando...</span>
+              ) : isEditing ? (
+                <>
+                  <span>Guardar Cambios ({formatCurrency(parsedAmount)})</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
               ) : (
                 <>
                   <span>

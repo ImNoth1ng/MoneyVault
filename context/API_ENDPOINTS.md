@@ -232,8 +232,55 @@ Usuario registrado con éxito
 **GET** `/api/v1/transactions?type=EXPENSE` (filtro opcional: EXPENSE, INCOME, TRANSFER)  
 **Headers:** `Authorization: Bearer {token}`
 
-### 25. Eliminar Movimiento (Revierte saldos)
+### 25. Actualizar Movimiento (Recalcula saldos automáticamente)
+**PUT** `/api/v1/transactions/{id}`  
+**Headers:** `Authorization: Bearer {token}`
+```json
+{
+  "accountId": 1,
+  "destinationAccountId": null,
+  "amount": 280.00,
+  "type": "EXPENSE",
+  "category": "Comida",
+  "description": "Cena en restaurante actualizada",
+  "transactionDate": "2026-10-27T15:30:00"
+}
+```
+
+### 26. Eliminar Movimiento (Revierte saldos)
 **DELETE** `/api/v1/transactions/{id}`  
+**Headers:** `Authorization: Bearer {token}`
+
+---
+
+## Movimientos Recurrentes (Plantillas de Acceso Rápido)
+
+### 27. Crear Movimiento Recurrente
+**POST** `/api/v1/recurring-transactions`  
+**Headers:** `Authorization: Bearer {token}`
+```json
+{
+  "name": "Metro",
+  "accountId": 1,
+  "destinationAccountId": null,
+  "amount": 5.00,
+  "type": "EXPENSE",
+  "category": "Transporte",
+  "description": "Pago de Metro",
+  "senderOrRecipient": null
+}
+```
+
+### 28. Listar Movimientos Recurrentes
+**GET** `/api/v1/recurring-transactions`  
+**Headers:** `Authorization: Bearer {token}`
+
+### 29. Actualizar Movimiento Recurrente
+**PUT** `/api/v1/recurring-transactions/{id}`  
+**Headers:** `Authorization: Bearer {token}`
+
+### 30. Eliminar Movimiento Recurrente
+**DELETE** `/api/v1/recurring-transactions/{id}`  
 **Headers:** `Authorization: Bearer {token}`
 
 ---

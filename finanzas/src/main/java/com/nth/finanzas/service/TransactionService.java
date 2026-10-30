@@ -145,6 +145,144 @@ public class TransactionService {
     }
 
     @Transactional
+    public TransactionResponse updateTransaction(Long userId, Long transactionId, TransactionRequest request) {
+        Transaction transaction = transactionRepository.findByIdAndUserId(transactionId, userId)
+                .orElseThrow(() -> new RuntimeException("Movimiento no encontrado"));
+
+        Account newAccount = accountRepository.findByIdAndUserId(request.getAccountId(), userId)
+                .orElseThrow(() -> new RuntimeException("Cuenta de origen o destino no encontrada o no pertenece al usuario"));
+
+        TransactionType newType;
+        try {
+            newType = TransactionType.valueOf(request.getType().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Tipo de movimiento inválido: " + request.getType() + ". Usa EXPENSE, INCOME o TRANSFER.");
+        }
+
+        Account newDestinationAccount = null;
+        if (newType == TransactionType.TRANSFER) {
+            if (request.getDestinationAccountId() == null) {
+                throw new RuntimeException("Para transferencias se debe especificar la cuenta de destino (destinationAccountId)");
+            }
+            if (request.getAccountId().equals(request.getDestinationAccountId())) {
+                throw new RuntimeException("La cuenta de origen y destino no pueden ser la misma");
+            }
+            newDestinationAccount = accountRepository.findByIdAndUserId(request.getDestinationAccountId(), userId)
+                    .orElseThrow(() -> new RuntimeException("Cuenta de destino no encontrada o no pertenece al usuario"));
+        }
+
+        // 1. Revertir los efectos del movimiento original en los saldos
+        Account oldAccount = transaction.getAccount();
+        BigDecimal oldAmount = transaction.getAmount();
+        TransactionType oldType = transaction.getType();
+
+        if (oldType == TransactionType.EXPENSE) {
+            if (oldAccount.getType() == Account.AccountType.CREDIT) {
+                BigDecimal debt = oldAccount.getCurrentBalance() != null ? oldAccount.getCurrentBalance() : BigDecimal.ZERO;
+                oldAccount.setCurrentBalance(debt.subtract(oldAmount));
+            } else {
+                BigDecimal bal = oldAccount.getCurrentBalance() != null ? oldAccount.getCurrentBalance() : BigDecimal.ZERO;
+                oldAccount.setCurrentBalance(bal.add(oldAmount));
+            }
+            accountRepository.save(oldAccount);
+
+        } else if (oldType == TransactionType.INCOME) {
+            if (oldAccount.getType() == Account.AccountType.CREDIT) {
+                BigDecimal debt = oldAccount.getCurrentBalance() != null ? oldAccount.getCurrentBalance() : BigDecimal.ZERO;
+                oldAccount.setCurrentBalance(debt.add(oldAmount));
+            } else {
+                BigDecimal bal = oldAccount.getCurrentBalance() != null ? oldAccount.getCurrentBalance() : BigDecimal.ZERO;
+                oldAccount.setCurrentBalance(bal.subtract(oldAmount));
+            }
+            accountRepository.save(oldAccount);
+
+        } else if (oldType == TransactionType.TRANSFER) {
+            Account oldDestinationAccount = transaction.getDestinationAccount();
+
+            if (oldAccount.getType() == Account.AccountType.CREDIT) {
+                BigDecimal debt = oldAccount.getCurrentBalance() != null ? oldAccount.getCurrentBalance() : BigDecimal.ZERO;
+                oldAccount.setCurrentBalance(debt.subtract(oldAmount));
+            } else {
+                BigDecimal bal = oldAccount.getCurrentBalance() != null ? oldAccount.getCurrentBalance() : BigDecimal.ZERO;
+                oldAccount.setCurrentBalance(bal.add(oldAmount));
+            }
+            accountRepository.save(oldAccount);
+
+            if (oldDestinationAccount != null) {
+                if (oldDestinationAccount.getType() == Account.AccountType.CREDIT) {
+                    BigDecimal debt = oldDestinationAccount.getCurrentBalance() != null ? oldDestinationAccount.getCurrentBalance() : BigDecimal.ZERO;
+                    oldDestinationAccount.setCurrentBalance(debt.add(oldAmount));
+                } else {
+                    BigDecimal bal = oldDestinationAccount.getCurrentBalance() != null ? oldDestinationAccount.getCurrentBalance() : BigDecimal.ZERO;
+                    oldDestinationAccount.setCurrentBalance(bal.subtract(oldAmount));
+                }
+                accountRepository.save(oldDestinationAccount);
+            }
+        }
+
+        // 2. Aplicar los efectos del movimiento actualizado en los saldos
+        BigDecimal newAmount = request.getAmount();
+
+        if (newType == TransactionType.EXPENSE) {
+            if (newAccount.getType() == Account.AccountType.CREDIT) {
+                BigDecimal currentDebt = newAccount.getCurrentBalance() != null ? newAccount.getCurrentBalance() : BigDecimal.ZERO;
+                newAccount.setCurrentBalance(currentDebt.add(newAmount));
+            } else {
+                BigDecimal currentBal = newAccount.getCurrentBalance() != null ? newAccount.getCurrentBalance() : BigDecimal.ZERO;
+                newAccount.setCurrentBalance(currentBal.subtract(newAmount));
+            }
+            accountRepository.save(newAccount);
+
+        } else if (newType == TransactionType.INCOME) {
+            if (newAccount.getType() == Account.AccountType.CREDIT) {
+                BigDecimal currentDebt = newAccount.getCurrentBalance() != null ? newAccount.getCurrentBalance() : BigDecimal.ZERO;
+                newAccount.setCurrentBalance(currentDebt.subtract(newAmount));
+            } else {
+                BigDecimal currentBal = newAccount.getCurrentBalance() != null ? newAccount.getCurrentBalance() : BigDecimal.ZERO;
+                newAccount.setCurrentBalance(currentBal.add(newAmount));
+            }
+            accountRepository.save(newAccount);
+
+        } else if (newType == TransactionType.TRANSFER && newDestinationAccount != null) {
+            if (newAccount.getType() == Account.AccountType.CREDIT) {
+                BigDecimal currentDebt = newAccount.getCurrentBalance() != null ? newAccount.getCurrentBalance() : BigDecimal.ZERO;
+                newAccount.setCurrentBalance(currentDebt.add(newAmount));
+            } else {
+                BigDecimal currentBal = newAccount.getCurrentBalance() != null ? newAccount.getCurrentBalance() : BigDecimal.ZERO;
+                newAccount.setCurrentBalance(currentBal.subtract(newAmount));
+            }
+            accountRepository.save(newAccount);
+
+            if (newDestinationAccount.getType() == Account.AccountType.CREDIT) {
+                BigDecimal currentDebt = newDestinationAccount.getCurrentBalance() != null ? newDestinationAccount.getCurrentBalance() : BigDecimal.ZERO;
+                newDestinationAccount.setCurrentBalance(currentDebt.subtract(newAmount));
+            } else {
+                BigDecimal currentBal = newDestinationAccount.getCurrentBalance() != null ? newDestinationAccount.getCurrentBalance() : BigDecimal.ZERO;
+                newDestinationAccount.setCurrentBalance(currentBal.add(newAmount));
+            }
+            accountRepository.save(newDestinationAccount);
+        }
+
+        // 3. Actualizar campos del movimiento
+        transaction.setAccount(newAccount);
+        transaction.setDestinationAccount(newDestinationAccount);
+        transaction.setAmount(newAmount);
+        transaction.setType(newType);
+        transaction.setCategory(request.getCategory() != null && !request.getCategory().isBlank() ? request.getCategory().trim() : null);
+        transaction.setDescription(request.getDescription());
+        transaction.setSenderOrRecipient(request.getSenderOrRecipient());
+        if (request.getDebtTicketId() != null) {
+            transaction.setDebtTicketId(request.getDebtTicketId());
+        }
+        if (request.getTransactionDate() != null) {
+            transaction.setTransactionDate(request.getTransactionDate());
+        }
+
+        Transaction saved = transactionRepository.save(transaction);
+        return mapToResponse(saved);
+    }
+
+    @Transactional
     public void deleteTransaction(Long userId, Long transactionId) {
         Transaction transaction = transactionRepository.findByIdAndUserId(transactionId, userId)
                 .orElseThrow(() -> new RuntimeException("Movimiento no encontrado"));
