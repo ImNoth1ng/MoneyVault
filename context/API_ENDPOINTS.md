@@ -213,7 +213,7 @@ Usuario registrado con éxito
 
 ## Movimientos (Gastos, Ingresos y Transferencias)
 
-### 23. Crear Movimiento
+### 23. Crear Movimiento (con opción de adjuntar Gasto a Ticket de Deuda)
 **POST** `/api/v1/transactions`  
 **Headers:** `Authorization: Bearer {token}`
 ```json
@@ -223,16 +223,22 @@ Usuario registrado con éxito
   "amount": 250.00,
   "type": "EXPENSE",
   "category": "Comida",
-  "description": "Cena en restaurante",
-  "transactionDate": "2026-10-27T15:30:00"
+  "description": "Cena en restaurante pagada con mi tarjeta",
+  "transactionDate": "2026-10-27T15:30:00",
+  "attachToTicket": true,
+  "ticketMode": "EXISTING",
+  "targetTicketId": 5,
+  "ticketItemConcept": "Cena en restaurante",
+  "ticketItemAmount": 250.00
 }
 ```
+*Opcionalmente, si `ticketMode` es `"NEW"`, puedes enviar `debtorId` (o `newDebtorName` y `newDebtorContact` para crear el deudor al vuelo) y `ticketDescription` para crear el ticket pendiente automáticamente.*
 
 ### 24. Listar Mis Movimientos
 **GET** `/api/v1/transactions?type=EXPENSE` (filtro opcional: EXPENSE, INCOME, TRANSFER)  
 **Headers:** `Authorization: Bearer {token}`
 
-### 25. Actualizar Movimiento (Recalcula saldos automáticamente)
+### 25. Actualizar Movimiento (Recalcula saldos y sincroniza con Ticket de Deuda)
 **PUT** `/api/v1/transactions/{id}`  
 **Headers:** `Authorization: Bearer {token}`
 ```json
@@ -243,9 +249,13 @@ Usuario registrado con éxito
   "type": "EXPENSE",
   "category": "Comida",
   "description": "Cena en restaurante actualizada",
-  "transactionDate": "2026-10-27T15:30:00"
+  "transactionDate": "2026-10-27T15:30:00",
+  "attachToTicket": true,
+  "ticketMode": "EXISTING",
+  "targetTicketId": 5
 }
 ```
+*Si se envía `"detachFromTicket": true`, el gasto se desvincula del ticket y su ítem se descuenta del total del ticket.*
 
 ### 26. Eliminar Movimiento (Revierte saldos)
 **DELETE** `/api/v1/transactions/{id}`  

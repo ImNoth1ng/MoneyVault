@@ -63,6 +63,7 @@ export const TransactionsPage = () => {
   >('EXPENSE');
   const [transactionToEdit, setTransactionToEdit] = useState<Transaction | null>(null);
   const [prefillRecurring, setPrefillRecurring] = useState<RecurringTransaction | null>(null);
+  const [autoAttachTicket, setAutoAttachTicket] = useState<boolean>(false);
 
   // Modal de Movimientos Recurrentes (Crear / Editar plantilla)
   const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false);
@@ -78,18 +79,21 @@ export const TransactionsPage = () => {
   ) => {
     setTransactionToEdit(null);
     setPrefillRecurring(null);
+    setAutoAttachTicket(false);
     setModalInitialType(type);
     setIsModalOpen(true);
   };
 
-  const handleOpenEditTransaction = (tx: Transaction) => {
+  const handleOpenEditTransaction = (tx: Transaction, attachTicket = false) => {
     setPrefillRecurring(null);
+    setAutoAttachTicket(attachTicket);
     setTransactionToEdit(tx);
     setIsModalOpen(true);
   };
 
   const handleUseAndAdjustRecurring = (rec: RecurringTransaction) => {
     setTransactionToEdit(null);
+    setAutoAttachTicket(false);
     setPrefillRecurring(rec);
     setIsModalOpen(true);
   };
@@ -103,15 +107,20 @@ export const TransactionsPage = () => {
 
     setQuickApplyingId(rec.id);
     try {
+      const now = new Date();
+      const localIsoDateTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 19);
+
       await createTxMutation.mutateAsync({
-        accountId: rec.accountId,
-        destinationAccountId: rec.destinationAccountId ?? null,
+        accountId: Number(rec.accountId),
+        destinationAccountId: rec.destinationAccountId ? Number(rec.destinationAccountId) : null,
         amount: amountNum,
         type: (rec.type as 'EXPENSE' | 'INCOME' | 'TRANSFER') || 'EXPENSE',
         category: rec.category || undefined,
         description: rec.description || rec.name,
         senderOrRecipient: rec.senderOrRecipient || undefined,
-        transactionDate: new Date().toISOString(),
+        transactionDate: localIsoDateTime,
       });
       triggerFeedback(
         'success',
@@ -159,6 +168,9 @@ export const TransactionsPage = () => {
       impactText = isCredit
         ? 'Se restará este monto de la deuda de tu tarjeta de crédito.'
         : 'Se devolverá este monto al saldo disponible de tu cuenta.';
+      if (tx.debtTicketId) {
+        impactText += `\nAdemás se descontará este cargo del Ticket #${tx.debtTicketId}.`;
+      }
     } else if (tx.type === 'INCOME') {
       impactText = 'Se descontará este monto del saldo de tu cuenta.';
     } else {
@@ -973,8 +985,21 @@ export const TransactionsPage = () => {
                           </p>
                         )}
                         {tx.debtTicketId && (
-                          <span className="inline-block mt-1 px-2 py-0.5 rounded text-[9px] font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-500/30">
-                            Ticket #{tx.debtTicketId} liquidado
+                          <span
+                            className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded text-[9px] font-bold border ${
+                              isExpense
+                                ? 'bg-cyan-950/80 text-cyan-300 border-cyan-500/30'
+                                : 'bg-emerald-950/80 text-emerald-300 border-emerald-500/30'
+                            }`}
+                          >
+                            <Receipt className="w-2.5 h-2.5" />
+                            <span>
+                              {isExpense
+                                ? `Cargado a Ticket #${tx.debtTicketId}${
+                                    tx.debtTicketDebtorName ? ` (${tx.debtTicketDebtorName})` : ''
+                                  }`
+                                : `Ticket #${tx.debtTicketId} liquidado`}
+                            </span>
                           </span>
                         )}
                       </td>
@@ -1033,11 +1058,20 @@ export const TransactionsPage = () => {
                         </span>
                       </td>
 
-                      {/* Acciones: Editar y Eliminar */}
+                      {/* Acciones: Adjuntar a Ticket, Editar y Eliminar */}
                       <td className="py-3.5 px-4 text-center">
                         <div className="flex items-center justify-center gap-1">
+                          {isExpense && !tx.debtTicketId && (
+                            <button
+                              onClick={() => handleOpenEditTransaction(tx, true)}
+                              className="p-1.5 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/15 rounded-xl transition"
+                              title="Adjuntar este gasto a un Ticket por Cobrar"
+                            >
+                              <Receipt className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
-                            onClick={() => handleOpenEditTransaction(tx)}
+                            onClick={() => handleOpenEditTransaction(tx, false)}
                             className="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-xl transition"
                             title="Editar movimiento y ajustar saldos"
                           >
@@ -1067,10 +1101,12 @@ export const TransactionsPage = () => {
         initialType={modalInitialType}
         transactionToEdit={transactionToEdit}
         prefillRecurring={prefillRecurring}
+        autoAttachTicket={autoAttachTicket}
         onClose={() => {
           setIsModalOpen(false);
           setTransactionToEdit(null);
           setPrefillRecurring(null);
+          setAutoAttachTicket(false);
         }}
         onSuccess={(msg) => triggerFeedback('success', msg)}
       />

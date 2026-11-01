@@ -70,6 +70,7 @@ export const useUpdateTicket = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['debt-tickets'] });
       queryClient.invalidateQueries({ queryKey: ['debtors'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
     },
   });
 };
@@ -109,6 +110,7 @@ export const useDeleteTicket = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['debt-tickets'] });
       queryClient.invalidateQueries({ queryKey: ['debtors'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
     },
   });
 };

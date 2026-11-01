@@ -115,6 +115,8 @@ export interface Transaction {
   category?: string;
   senderOrRecipient?: string;
   debtTicketId?: string | number | null;
+  debtTicketDescription?: string | null;
+  debtTicketDebtorName?: string | null;
   transactionDate?: string;
   date?: string;
   createdAt?: string;
@@ -131,6 +133,16 @@ export interface TransactionRequest {
   senderOrRecipient?: string;
   debtTicketId?: string | number | null;
   transactionDate?: string;
+  attachToTicket?: boolean;
+  ticketMode?: 'EXISTING' | 'NEW';
+  targetTicketId?: string | number | null;
+  debtorId?: string | number | null;
+  newDebtorName?: string;
+  newDebtorContact?: string;
+  ticketDescription?: string;
+  ticketItemConcept?: string;
+  ticketItemAmount?: number;
+  detachFromTicket?: boolean;
 }
 
 export interface RecurringTransaction {
@@ -185,6 +197,7 @@ export interface TicketItem {
   id?: string | number;
   concept: string;
   amount: string | number;
+  transactionId?: string | number | null;
 }
 
 export interface DebtTicket {

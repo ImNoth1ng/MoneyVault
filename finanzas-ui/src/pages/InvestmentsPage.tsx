@@ -264,14 +264,20 @@ export default function InvestmentsPage() {
 
     try {
       await createHoldingMutation.mutateAsync({
-        accountId: buyBrokerId,
+        accountId: Number(buyBrokerId),
         symbol: buySymbol.trim().toUpperCase(),
         name: buyName.trim() || buySymbol.trim().toUpperCase(),
         quantity: qty,
         buyPrice: prc,
         currency: buyCurrency,
         assetType: buyAssetType,
-        buyDate: buyDate ? new Date(buyDate).toISOString() : undefined,
+        buyDate: buyDate
+          ? buyDate.length === 10
+            ? `${buyDate}T12:00:00`
+            : buyDate.length === 16
+            ? `${buyDate}:00`
+            : buyDate
+          : undefined,
         deductFromCash: buyDeductFromCash,
         notes: buyNotes.trim() || undefined
       });

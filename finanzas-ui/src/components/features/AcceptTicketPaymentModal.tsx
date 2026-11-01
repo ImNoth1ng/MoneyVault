@@ -84,9 +84,13 @@ export const AcceptTicketPaymentModal: React.FC<AcceptTicketPaymentModalProps> =
       await payTicketMutation.mutateAsync({
         id: ticket.id,
         paymentData: {
-          accountId: selectedAccountId,
+          accountId: Number(selectedAccountId),
           amountReceived: receivedNum,
-          paymentDate: paymentDate ? new Date(paymentDate).toISOString() : undefined,
+          paymentDate: paymentDate
+            ? paymentDate.length === 16
+              ? `${paymentDate}:00`
+              : paymentDate
+            : undefined,
           notes: notes.trim() || undefined,
         },
       });

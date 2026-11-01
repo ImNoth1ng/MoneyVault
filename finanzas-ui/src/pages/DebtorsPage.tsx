@@ -130,7 +130,11 @@ export default function DebtorsPage() {
       setTicketDescription(ticketToEdit.description);
       setTicketItems(
         ticketToEdit.items && ticketToEdit.items.length > 0
-          ? ticketToEdit.items.map((i) => ({ concept: i.concept, amount: String(i.amount) }))
+          ? ticketToEdit.items.map((i) => ({
+              concept: i.concept,
+              amount: String(i.amount),
+              transactionId: i.transactionId ?? null,
+            }))
           : [{ concept: 'Concepto principal', amount: String(ticketToEdit.totalAmount || '') }]
       );
     } else {
@@ -176,7 +180,11 @@ export default function DebtorsPage() {
     const payload = {
       debtorId: ticketDebtorId,
       description: ticketDescription.trim(),
-      items: validItems.map((i) => ({ concept: i.concept.trim(), amount: Number(i.amount) })),
+      items: validItems.map((i) => ({
+        concept: i.concept.trim(),
+        amount: Number(i.amount),
+        transactionId: i.transactionId ?? null,
+      })),
     };
 
     try {
@@ -296,7 +304,11 @@ export default function DebtorsPage() {
       const openTicket = tickets.find((t) => String(t.debtorId) === String(rec.debtorId) && !isTicketPaid(t));
 
       if (openTicket) {
-        const existingItems = openTicket.items.map((i) => ({ concept: i.concept, amount: Number(i.amount) }));
+        const existingItems = openTicket.items.map((i) => ({
+          concept: i.concept,
+          amount: Number(i.amount),
+          transactionId: i.transactionId ?? null,
+        }));
         const updatedItems = [...existingItems, { concept: `${rec.serviceName} (Día ${rec.dayOfMonth})`, amount: Number(rec.amount) }];
 
         await updateTicket.mutateAsync({
