@@ -21,4 +21,7 @@ public class TicketItemRequest {
     @NotNull(message = "El monto es obligatorio")
     @Schema(description = "Monto del concepto", example = "50000.00")
     private BigDecimal amount;
+
+    @Schema(description = "ID del movimiento de gasto vinculado (opcional)", nullable = true)
+    private Long transactionId;
 }

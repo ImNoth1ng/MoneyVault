@@ -36,4 +36,52 @@ public class TransactionRequest {
     private Long debtTicketId;
 
     private LocalDateTime transactionDate;
+
+    // --- Campos opcionales para adjuntar un gasto (EXPENSE) a un ticket de deuda ---
+    private Boolean attachToTicket;
+
+    /**
+     * Modo de asociación al ticket: "EXISTING" (ticket pendiente existente) o "NEW" (crear nuevo ticket)
+     */
+    private String ticketMode;
+
+    /**
+     * ID del ticket existente al cual agregar el gasto (cuando ticketMode == "EXISTING")
+     */
+    private Long targetTicketId;
+
+    /**
+     * ID del deudor existente (cuando ticketMode == "NEW")
+     */
+    private Long debtorId;
+
+    /**
+     * Nombre de un nuevo deudor a crear al vuelo (cuando ticketMode == "NEW" y debtorId == null)
+     */
+    private String newDebtorName;
+
+    /**
+     * Contacto opcional del nuevo deudor creado al vuelo
+     */
+    private String newDebtorContact;
+
+    /**
+     * Descripción / título del nuevo ticket (cuando ticketMode == "NEW")
+     */
+    private String ticketDescription;
+
+    /**
+     * Concepto del ítem dentro del ticket (si se omite, usa la descripción o categoría del gasto)
+     */
+    private String ticketItemConcept;
+
+    /**
+     * Monto específico a cargar en el ticket (si se omite, usa el monto total del gasto)
+     */
+    private BigDecimal ticketItemAmount;
+
+    /**
+     * Si es true al editar un movimiento, desvincula el gasto del ticket y remueve su cargo del ticket
+     */
+    private Boolean detachFromTicket;
 }

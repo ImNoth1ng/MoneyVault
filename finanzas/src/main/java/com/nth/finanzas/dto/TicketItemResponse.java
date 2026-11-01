@@ -16,4 +16,6 @@ public class TicketItemResponse {
     private String concept;
     @Schema(description = "Monto del ítem", example = "50000.00")
     private BigDecimal amount;
+    @Schema(description = "ID del movimiento de gasto vinculado (si aplica)")
+    private Long transactionId;
 }

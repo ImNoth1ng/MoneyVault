@@ -26,4 +26,7 @@ public class TicketItem {
 
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal amount;
+
+    @Column(name = "transaction_id")
+    private Long transactionId;
 }

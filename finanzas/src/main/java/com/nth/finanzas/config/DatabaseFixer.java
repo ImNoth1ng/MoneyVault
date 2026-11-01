@@ -40,5 +40,12 @@ public class DatabaseFixer implements CommandLineRunner {
         } catch (Exception e) {
             System.out.println("DB FIX INFO: could not update accounts.type - " + e.getMessage());
         }
+
+        try {
+            jdbcTemplate.execute("ALTER TABLE ticket_items ADD COLUMN transaction_id BIGINT NULL");
+            System.out.println("DB FIX: Added 'transaction_id' to ticket_items.");
+        } catch (Exception e) {
+            System.out.println("DB FIX INFO: ticket_items.transaction_id check - " + e.getMessage());
+        }
     }
 }

@@ -61,6 +61,7 @@ public class DebtTicketService {
                     .debtTicket(savedTicket)
                     .concept(itemRequest.getConcept())
                     .amount(itemRequest.getAmount())
+                    .transactionId(itemRequest.getTransactionId())
                     .build();
             savedTicket.getItems().add(item);
         }
@@ -91,6 +92,7 @@ public class DebtTicketService {
                         .debtTicket(ticket)
                         .concept(itemReq.getConcept())
                         .amount(itemReq.getAmount())
+                        .transactionId(itemReq.getTransactionId())
                         .build();
                 ticket.getItems().add(item);
                 totalAmount = totalAmount.add(itemReq.getAmount() != null ? itemReq.getAmount() : BigDecimal.ZERO);
@@ -203,6 +205,7 @@ public class DebtTicketService {
                         .id(item.getId())
                         .concept(item.getConcept())
                         .amount(item.getAmount())
+                        .transactionId(item.getTransactionId())
                         .build())
                 .collect(Collectors.toList());
 

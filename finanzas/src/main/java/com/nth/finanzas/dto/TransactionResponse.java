@@ -26,6 +26,8 @@ public class TransactionResponse {
     private String description;
     private String senderOrRecipient;
     private Long debtTicketId;
+    private String debtTicketDescription;
+    private String debtTicketDebtorName;
     private LocalDateTime transactionDate;
     private LocalDateTime createdAt;
 }
