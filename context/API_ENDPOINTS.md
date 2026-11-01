@@ -333,6 +333,15 @@ Usuario registrado con éxito
 **POST** `/api/v1/investments/refresh`  
 **Headers:** `Authorization: Bearer {token}`
 
+### 31. Actualizar Posición de Inversión
+**PUT** `/api/v1/investments/{id}`  
+**Headers:** `Authorization: Bearer {token}`  
+*Permite actualizar cantidad de títulos, precio de compra, moneda, broker, fecha y opcionalmente ajustar la diferencia en el saldo líquido del broker (`deductFromCash: true`).*
+
+### 32. Eliminar Posición de Inversión
+**DELETE** `/api/v1/investments/{id}?refundToCash=true`  
+**Headers:** `Authorization: Bearer {token}`
+
 ---
 
 ## Estructura de Carpetas Creada

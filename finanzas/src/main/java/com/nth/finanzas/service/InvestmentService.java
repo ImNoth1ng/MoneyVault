@@ -135,14 +135,65 @@ public class InvestmentService {
         InvestmentHolding holding = holdingRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new RuntimeException("Posición de inversión no encontrada"));
 
+        BigDecimal usdRate = marketDataService.getUsdToMxnRate();
+
+        Account oldAccount = holding.getAccount();
+        Account targetAccount = oldAccount;
+        if (req.getAccountId() != null && !req.getAccountId().equals(oldAccount.getId())) {
+            targetAccount = accountRepository.findByIdAndUserId(req.getAccountId(), userId)
+                    .orElseThrow(() -> new RuntimeException("Cuenta de inversión no encontrada o no pertenece al usuario"));
+            if (targetAccount.getType() != Account.AccountType.INVESTMENT) {
+                throw new RuntimeException("La cuenta seleccionada no es de tipo INVERSIÓN (INVESTMENT)");
+            }
+        }
+
+        String oldCurrency = holding.getCurrency() != null ? holding.getCurrency() : "MXN";
+        String newCurrency = (req.getCurrency() != null && !req.getCurrency().isBlank())
+                ? req.getCurrency().trim().toUpperCase()
+                : oldCurrency;
+
+        if (req.isDeductFromCash()) {
+            BigDecimal oldCost = holding.getQuantity().multiply(holding.getBuyPrice()).setScale(4, RoundingMode.HALF_UP);
+            BigDecimal oldCostInOldAcc = oldCost;
+            if ("USD".equalsIgnoreCase(oldCurrency) && !"USD".equalsIgnoreCase(oldAccount.getCurrency())) {
+                oldCostInOldAcc = oldCost.multiply(usdRate).setScale(4, RoundingMode.HALF_UP);
+            } else if (!"USD".equalsIgnoreCase(oldCurrency) && "USD".equalsIgnoreCase(oldAccount.getCurrency())) {
+                oldCostInOldAcc = oldCost.divide(usdRate, 4, RoundingMode.HALF_UP);
+            }
+
+            BigDecimal newCost = req.getQuantity().multiply(req.getBuyPrice()).setScale(4, RoundingMode.HALF_UP);
+            BigDecimal newCostInTargetAcc = newCost;
+            if ("USD".equalsIgnoreCase(newCurrency) && !"USD".equalsIgnoreCase(targetAccount.getCurrency())) {
+                newCostInTargetAcc = newCost.multiply(usdRate).setScale(4, RoundingMode.HALF_UP);
+            } else if (!"USD".equalsIgnoreCase(newCurrency) && "USD".equalsIgnoreCase(targetAccount.getCurrency())) {
+                newCostInTargetAcc = newCost.divide(usdRate, 4, RoundingMode.HALF_UP);
+            }
+
+            if (oldAccount.getId().equals(targetAccount.getId())) {
+                BigDecimal diff = newCostInTargetAcc.subtract(oldCostInOldAcc);
+                if (diff.compareTo(BigDecimal.ZERO) != 0) {
+                    BigDecimal currentBal = targetAccount.getCurrentBalance() != null ? targetAccount.getCurrentBalance() : BigDecimal.ZERO;
+                    targetAccount.setCurrentBalance(currentBal.subtract(diff));
+                    accountRepository.save(targetAccount);
+                }
+            } else {
+                BigDecimal oldBal = oldAccount.getCurrentBalance() != null ? oldAccount.getCurrentBalance() : BigDecimal.ZERO;
+                oldAccount.setCurrentBalance(oldBal.add(oldCostInOldAcc));
+                accountRepository.save(oldAccount);
+
+                BigDecimal newBal = targetAccount.getCurrentBalance() != null ? targetAccount.getCurrentBalance() : BigDecimal.ZERO;
+                targetAccount.setCurrentBalance(newBal.subtract(newCostInTargetAcc));
+                accountRepository.save(targetAccount);
+            }
+        }
+
+        holding.setAccount(targetAccount);
         String symbol = req.getSymbol().trim().toUpperCase();
         holding.setSymbol(symbol);
         holding.setName(req.getName() != null && !req.getName().isBlank() ? req.getName().trim() : symbol);
         holding.setQuantity(req.getQuantity());
         holding.setBuyPrice(req.getBuyPrice());
-        if (req.getCurrency() != null && !req.getCurrency().isBlank()) {
-            holding.setCurrency(req.getCurrency().trim().toUpperCase());
-        }
+        holding.setCurrency(newCurrency);
         if (req.getAssetType() != null && !req.getAssetType().isBlank()) {
             holding.setAssetType(req.getAssetType().trim().toUpperCase());
         }
@@ -152,7 +203,6 @@ public class InvestmentService {
         holding.setNotes(req.getNotes());
 
         InvestmentHolding updated = holdingRepository.save(holding);
-        BigDecimal usdRate = marketDataService.getUsdToMxnRate();
         StockQuoteDTO quote = marketDataService.getQuote(symbol);
         return mapToResponse(updated, quote, usdRate);
     }

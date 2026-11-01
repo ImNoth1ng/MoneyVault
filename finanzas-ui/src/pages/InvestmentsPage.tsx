@@ -8,9 +8,10 @@ import {
   Search,
   ExternalLink,
   Trash2,
+  Pencil,
+  Activity,
   DollarSign,
   PieChart,
-  BarChart3,
   AlertCircle,
   CheckCircle2,
   ArrowRight,
@@ -28,8 +29,8 @@ import {
   Cell,
   Tooltip,
   ResponsiveContainer,
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -39,12 +40,13 @@ import {
   useInvestments,
   usePortfolioSummary,
   useCreateHolding,
+  useUpdateHolding,
   useDeleteHolding,
   useRefreshedQuotes
 } from '../hooks/useInvestments';
 import { useAccounts, useCreateAccount, useUpdateAccount } from '../hooks/useAccounts';
 import { TransactionModal } from '../components/features/TransactionModal';
-import { formatCurrency, formatDate } from '../utils/formatters';
+import { formatCurrency } from '../utils/formatters';
 import { InvestmentHolding, AccountType } from '../types';
 import apiClient from '../lib/apiClient';
 
@@ -64,9 +66,10 @@ export default function InvestmentsPage() {
   const [selectedBrokerId, setSelectedBrokerId] = useState<string | number>('ALL');
 
   const { data: holdings = [], isLoading: holdingsLoading, refetch: refetchHoldings } = useInvestments(selectedBrokerId);
-  const { data: portfolioSummary, isLoading: summaryLoading, refetch: refetchSummary } = usePortfolioSummary();
+  const { data: portfolioSummary, refetch: refetchSummary } = usePortfolioSummary();
 
   const createHoldingMutation = useCreateHolding();
+  const updateHoldingMutation = useUpdateHolding();
   const deleteHoldingMutation = useDeleteHolding();
   const refreshQuotesMutation = useRefreshedQuotes();
   const createAccountMutation = useCreateAccount();
@@ -75,9 +78,11 @@ export default function InvestmentsPage() {
   // Estados locales
   const [searchQuery, setSearchQuery] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [leftChartMode, setLeftChartMode] = useState<'LINE' | 'PIE'>('LINE');
 
   // Modales
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
+  const [editingHolding, setEditingHolding] = useState<InvestmentHolding | null>(null);
   const [isFundModalOpen, setIsFundModalOpen] = useState(false);
   const [isCreateBrokerModalOpen, setIsCreateBrokerModalOpen] = useState(false);
   const [isEditCashModalOpen, setIsEditCashModalOpen] = useState(false);
@@ -229,6 +234,7 @@ export default function InvestmentsPage() {
       return;
     }
     const defaultBroker = selectedBrokerId !== 'ALL' ? selectedBrokerId : brokerAccounts[0].id;
+    setEditingHolding(null);
     setBuyBrokerId(defaultBroker);
     setBuySymbol('');
     setBuyName('');
@@ -241,6 +247,23 @@ export default function InvestmentsPage() {
     setBuyNotes('');
     setFetchedLivePrice(null);
     setFetchedQuoteMeta(null);
+    setIsBuyModalOpen(true);
+  };
+
+  const handleOpenEditHolding = (holding: InvestmentHolding) => {
+    setEditingHolding(holding);
+    setBuyBrokerId(holding.accountId);
+    setBuySymbol(holding.symbol);
+    setBuyName(holding.name || holding.symbol);
+    setBuyQuantity(String(holding.quantity));
+    setBuyPrice(String(holding.buyPrice));
+    setBuyCurrency(holding.currency === 'USD' ? 'USD' : 'MXN');
+    setBuyAssetType(holding.assetType || 'STOCK');
+    setBuyDate(holding.buyDate ? holding.buyDate.slice(0, 10) : new Date().toISOString().slice(0, 10));
+    setBuyDeductFromCash(false);
+    setBuyNotes(holding.notes || '');
+    setFetchedLivePrice(holding.currentPrice ? Number(holding.currentPrice) : null);
+    setFetchedQuoteMeta({ currency: holding.currency });
     setIsBuyModalOpen(true);
   };
 
@@ -262,30 +285,43 @@ export default function InvestmentsPage() {
       return;
     }
 
-    try {
-      await createHoldingMutation.mutateAsync({
-        accountId: Number(buyBrokerId),
-        symbol: buySymbol.trim().toUpperCase(),
-        name: buyName.trim() || buySymbol.trim().toUpperCase(),
-        quantity: qty,
-        buyPrice: prc,
-        currency: buyCurrency,
-        assetType: buyAssetType,
-        buyDate: buyDate
-          ? buyDate.length === 10
-            ? `${buyDate}T12:00:00`
-            : buyDate.length === 16
-            ? `${buyDate}:00`
-            : buyDate
-          : undefined,
-        deductFromCash: buyDeductFromCash,
-        notes: buyNotes.trim() || undefined
-      });
+    const requestPayload = {
+      accountId: Number(buyBrokerId),
+      symbol: buySymbol.trim().toUpperCase(),
+      name: buyName.trim() || buySymbol.trim().toUpperCase(),
+      quantity: qty,
+      buyPrice: prc,
+      currency: buyCurrency,
+      assetType: buyAssetType,
+      buyDate: buyDate
+        ? buyDate.length === 10
+          ? `${buyDate}T12:00:00`
+          : buyDate.length === 16
+          ? `${buyDate}:00`
+          : buyDate
+        : undefined,
+      deductFromCash: buyDeductFromCash,
+      notes: buyNotes.trim() || undefined
+    };
 
-      triggerFeedback('success', `Posición de ${qty} ${buySymbol.toUpperCase()} registrada con éxito.`);
+    try {
+      if (editingHolding) {
+        await updateHoldingMutation.mutateAsync({
+          id: editingHolding.id,
+          request: requestPayload
+        });
+        triggerFeedback('success', `Posición de ${qty} ${buySymbol.toUpperCase()} actualizada con éxito.`);
+      } else {
+        await createHoldingMutation.mutateAsync(requestPayload);
+        triggerFeedback('success', `Posición de ${qty} ${buySymbol.toUpperCase()} registrada con éxito.`);
+      }
+      setEditingHolding(null);
       setIsBuyModalOpen(false);
     } catch (err: any) {
-      const msg = err.response?.data?.message || err.message || 'Error al registrar la posición.';
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        (editingHolding ? 'Error al actualizar la posición.' : 'Error al registrar la posición.');
       triggerFeedback('error', msg);
     }
   };
@@ -373,9 +409,9 @@ export default function InvestmentsPage() {
     };
   }, [selectedBroker, portfolioSummary, holdings.length]);
 
-  // Datos para gráfico de barras comparativo (Costo vs Valor Actual por Activo)
-  const comparisonBarData = useMemo(() => {
-    return holdings.slice(0, 8).map((h) => {
+  // Datos para gráfica lineal comparativa (Costo vs Valor Actual por Activo)
+  const comparisonLineData = useMemo(() => {
+    const items = holdings.slice(0, 10).map((h) => {
       const invested = Number(h.totalInvestedInAccountCurrency || h.totalInvested) || 0;
       const current = Number(h.currentValueInAccountCurrency || h.currentValue) || 0;
       return {
@@ -384,6 +420,44 @@ export default function InvestmentsPage() {
         'Valor Actual': current
       };
     });
+    if (items.length === 1) {
+      return [{ symbol: 'Base', Invertido: 0, 'Valor Actual': 0 }, ...items];
+    }
+    return items;
+  }, [holdings]);
+
+  // Datos para gráfica lineal de evolución acumulada del portafolio
+  const cumulativeLineData = useMemo(() => {
+    const sorted = [...holdings].sort((a, b) => {
+      const dateA = a.buyDate ? new Date(a.buyDate).getTime() : 0;
+      const dateB = b.buyDate ? new Date(b.buyDate).getTime() : 0;
+      return dateA - dateB;
+    });
+
+    let runningInvested = 0;
+    let runningValue = 0;
+
+    const points = [
+      {
+        label: 'Inicio',
+        Invertido: 0,
+        'Valor Actual': 0
+      }
+    ];
+
+    sorted.forEach((h, idx) => {
+      const invested = Number(h.totalInvestedInAccountCurrency || h.totalInvested) || 0;
+      const current = Number(h.currentValueInAccountCurrency || h.currentValue) || 0;
+      runningInvested += invested;
+      runningValue += current;
+      points.push({
+        label: sorted.length > 1 && sorted.filter((x) => x.symbol === h.symbol).length > 1 ? `${h.symbol} #${idx + 1}` : h.symbol,
+        Invertido: Number(runningInvested.toFixed(2)),
+        'Valor Actual': Number(runningValue.toFixed(2))
+      });
+    });
+
+    return points;
   }, [holdings]);
 
   // Datos para gráfico de pastel de asignación
@@ -585,16 +659,23 @@ export default function InvestmentsPage() {
             </p>
           </div>
           <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-bold">
-            <span className={activeMetrics.gainLoss >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-              {activeMetrics.gainLoss >= 0 ? '▲ +' : '▼ '}
-              {activeMetrics.gainLossPercent.toFixed(2)}% ROI
+            <span className={`flex items-center gap-1 ${activeMetrics.gainLoss >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {activeMetrics.gainLoss >= 0 ? (
+                <TrendingUp className="w-3.5 h-3.5" />
+              ) : (
+                <TrendingDown className="w-3.5 h-3.5" />
+              )}
+              <span>
+                {activeMetrics.gainLoss >= 0 ? '+' : ''}
+                {activeMetrics.gainLossPercent.toFixed(2)}% ROI
+              </span>
             </span>
             <span className="text-[10px] text-slate-500 font-medium">Histórico</span>
           </div>
         </div>
       </div>
 
-      {/* 🧭 SELECTOR DE BROKERS (TABS) & TIPO DE CAMBIO */}
+      {/* SELECTOR DE BROKERS (TABS) & TIPO DE CAMBIO */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/60 p-2.5 rounded-2xl border border-slate-800">
         
         {/* Pestañas de brokers */}
@@ -682,24 +763,106 @@ export default function InvestmentsPage() {
         </div>
       </div>
 
-      {/* 📈 SECCIÓN DE GRÁFICOS INTERACTIVOS (DISTRIBUCIÓN Y RENDIMIENTO) */}
+      {/* SECCIÓN DE GRÁFICAS LINEALES INTERACTIVAS (EVOLUCIÓN Y RENDIMIENTO) */}
       {holdings.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
-          {/* Gráfico 1: Asignación de Activos (Donut Chart) */}
+          {/* Gráfico 1: Evolución Acumulada de Cartera (LineChart) con opción de ver Distribución */}
           <div className="glass-card rounded-3xl p-5 border border-slate-800 space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <div>
                 <h3 className="text-sm font-black text-white tracking-tight flex items-center gap-2">
-                  <PieChart className="w-4 h-4 text-emerald-400" />
-                  <span>Distribución de Cartera</span>
+                  {leftChartMode === 'LINE' ? (
+                    <Activity className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <PieChart className="w-4 h-4 text-emerald-400" />
+                  )}
+                  <span>
+                    {leftChartMode === 'LINE' ? 'Evolución Acumulada de Cartera' : 'Distribución de Cartera'}
+                  </span>
                 </h3>
-                <p className="text-[11px] text-slate-400 font-medium">Porcentaje por activo y efectivo disponible</p>
+                <p className="text-[11px] text-slate-400 font-medium">
+                  {leftChartMode === 'LINE'
+                    ? 'Trayectoria lineal de capital invertido vs. valor actual acumulado'
+                    : 'Porcentaje por activo y efectivo disponible'}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setLeftChartMode('LINE')}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 ${
+                    leftChartMode === 'LINE'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Activity className="w-3 h-3" />
+                  <span>Lineal</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeftChartMode('PIE')}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 ${
+                    leftChartMode === 'PIE'
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <PieChart className="w-3 h-3" />
+                  <span>Distribución</span>
+                </button>
               </div>
             </div>
 
             <div className="h-64 w-full">
-              {allocationPieData.length > 0 ? (
+              {leftChartMode === 'LINE' ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={cumulativeLineData} margin={{ top: 10, right: 15, left: -15, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                    <XAxis dataKey="label" stroke="#64748b" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                    <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v) => `$${v}`} />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="bg-[#0f172a] border border-slate-700/80 rounded-xl p-3 shadow-2xl text-xs space-y-1">
+                              <p className="font-extrabold text-white mb-1">{label}</p>
+                              {payload.map((p: any) => (
+                                <p key={p.name} className="flex justify-between gap-3 text-[11px]">
+                                  <span className="text-slate-400">{p.name}:</span>
+                                  <span className={`font-mono font-bold ${p.name === 'Valor Actual' ? 'text-emerald-400' : 'text-cyan-300'}`}>
+                                    {formatCurrency(Number(p.value))}
+                                  </span>
+                                </p>
+                              ))}
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
+                    <Line
+                      type="monotone"
+                      dataKey="Invertido"
+                      stroke="#06b6d4"
+                      strokeWidth={2.5}
+                      dot={{ r: 4, fill: '#06b6d4', strokeWidth: 2, stroke: '#0f172a' }}
+                      activeDot={{ r: 6 }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="Valor Actual"
+                      stroke="#10b981"
+                      strokeWidth={3}
+                      dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#0f172a' }}
+                      activeDot={{ r: 6 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : allocationPieData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <RechartsPie>
                     <Pie
@@ -752,21 +915,21 @@ export default function InvestmentsPage() {
             </div>
           </div>
 
-          {/* Gráfico 2: Costo vs Valor Actual por Activo (Bar Chart) */}
+          {/* Gráfico 2: Costo vs Valor Actual por Activo (Gráfica Lineal) */}
           <div className="glass-card rounded-3xl p-5 border border-slate-800 space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-black text-white tracking-tight flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-cyan-400" />
-                  <span>Costo vs. Valor Actual</span>
+                  <TrendingUp className="w-4 h-4 text-cyan-400" />
+                  <span>Costo vs. Valor Actual (Lineal)</span>
                 </h3>
-                <p className="text-[11px] text-slate-400 font-medium">Comparativa de adquisición contra cotización de mercado</p>
+                <p className="text-[11px] text-slate-400 font-medium">Comparativa lineal de costo de adquisición contra cotización de mercado</p>
               </div>
             </div>
 
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={comparisonBarData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <LineChart data={comparisonLineData} margin={{ top: 10, right: 15, left: -15, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                   <XAxis dataKey="symbol" stroke="#64748b" tick={{ fontSize: 11, fill: '#94a3b8' }} />
                   <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v) => `$${v}`} />
@@ -779,7 +942,7 @@ export default function InvestmentsPage() {
                             {payload.map((p: any) => (
                               <p key={p.name} className="flex justify-between gap-3 text-[11px]">
                                 <span className="text-slate-400">{p.name}:</span>
-                                <span className={`font-mono font-bold ${p.name === 'Valor Actual' ? 'text-emerald-400' : 'text-slate-200'}`}>
+                                <span className={`font-mono font-bold ${p.name === 'Valor Actual' ? 'text-emerald-400' : 'text-cyan-300'}`}>
                                   {formatCurrency(Number(p.value))}
                                 </span>
                               </p>
@@ -791,9 +954,24 @@ export default function InvestmentsPage() {
                     }}
                   />
                   <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
-                  <Bar dataKey="Invertido" fill="#475569" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Valor Actual" fill="#10b981" radius={[4, 4, 0, 0]} />
-                </BarChart>
+                  <Line
+                    type="monotone"
+                    dataKey="Invertido"
+                    stroke="#06b6d4"
+                    strokeWidth={2.5}
+                    strokeDasharray="5 5"
+                    dot={{ r: 4, fill: '#06b6d4', strokeWidth: 2, stroke: '#0f172a' }}
+                    activeDot={{ r: 6 }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="Valor Actual"
+                    stroke="#10b981"
+                    strokeWidth={3}
+                    dot={{ r: 4.5, fill: '#10b981', strokeWidth: 2, stroke: '#0f172a' }}
+                    activeDot={{ r: 6.5 }}
+                  />
+                </LineChart>
               </ResponsiveContainer>
             </div>
 
@@ -932,8 +1110,15 @@ export default function InvestmentsPage() {
                               dayChange >= 0 ? 'text-emerald-400' : 'text-rose-400'
                             }`}
                           >
-                            {dayChange >= 0 ? '▲ +' : '▼ '}
-                            {dayChange.toFixed(2)}% hoy
+                            {dayChange >= 0 ? (
+                              <TrendingUp className="w-3 h-3" />
+                            ) : (
+                              <TrendingDown className="w-3 h-3" />
+                            )}
+                            <span>
+                              {dayChange >= 0 ? '+' : ''}
+                              {dayChange.toFixed(2)}% hoy
+                            </span>
                           </span>
                         )}
                       </td>
@@ -968,6 +1153,15 @@ export default function InvestmentsPage() {
                       {/* Acciones */}
                       <td className="py-3.5 px-4 text-center">
                         <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditHolding(h)}
+                            className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-slate-800 rounded-lg transition"
+                            title="Editar posición"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+
                           <a
                             href={`https://finance.yahoo.com/quote/${h.symbol}`}
                             target="_blank"
@@ -979,6 +1173,7 @@ export default function InvestmentsPage() {
                           </a>
 
                           <button
+                            type="button"
                             onClick={() => {
                               setDeleteConfirmHolding(h);
                               setRefundToCashOnDelete(true);
@@ -999,7 +1194,7 @@ export default function InvestmentsPage() {
         )}
       </div>
 
-      {/* 🛒 MODAL: REGISTRAR NUEVA POSICIÓN / COMPRA DE ACCIÓN */}
+      {/* MODAL: REGISTRAR O EDITAR POSICIÓN / COMPRA DE ACCIÓN */}
       {isBuyModalOpen && (
         <div className="fixed inset-0 z-[99999] bg-[#0b0f19]/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
           <div className="w-full max-w-lg bg-[#0f172a] border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 my-auto relative">
@@ -1008,20 +1203,27 @@ export default function InvestmentsPage() {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
-                  <TrendingUp className="w-6 h-6 stroke-[2.5]" />
+                  {editingHolding ? (
+                    <Pencil className="w-6 h-6 stroke-[2.5]" />
+                  ) : (
+                    <TrendingUp className="w-6 h-6 stroke-[2.5]" />
+                  )}
                 </div>
                 <div>
                   <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block">
-                    OPERACIÓN BURSÁTIL
+                    {editingHolding ? 'AJUSTE DE POSICIÓN EN CARTERA' : 'OPERACIÓN BURSÁTIL'}
                   </span>
                   <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
-                    Registrar Compra de Activo
+                    {editingHolding ? `Editar Posición (${editingHolding.symbol})` : 'Registrar Compra de Activo'}
                   </h2>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setIsBuyModalOpen(false)}
+                onClick={() => {
+                  setEditingHolding(null);
+                  setIsBuyModalOpen(false);
+                }}
                 className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition"
               >
                 <X className="w-5 h-5" />
@@ -1100,7 +1302,7 @@ export default function InvestmentsPage() {
                         </span>
                       </div>
                       <span className="text-[10px] text-slate-400 block font-medium">
-                        Cotización en Pesos Mexicanos (MXN)
+                        Cotización de referencia en mercado
                       </span>
                     </div>
                     <button
@@ -1115,18 +1317,36 @@ export default function InvestmentsPage() {
                 )}
               </div>
 
-              {/* Nombre de la empresa */}
-              <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Nombre de la Empresa o Fondo
-                </label>
-                <input
-                  type="text"
-                  value={buyName}
-                  onChange={(e) => setBuyName(e.target.value)}
-                  placeholder="Ej. NVIDIA Corporation, Vanguard S&P 500 ETF..."
-                  className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700/80 rounded-xl text-white text-xs font-medium focus:outline-none focus:border-emerald-500 transition"
-                />
+              {/* Nombre de la empresa y Tipo de Activo */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    Nombre de la Empresa o Fondo
+                  </label>
+                  <input
+                    type="text"
+                    value={buyName}
+                    onChange={(e) => setBuyName(e.target.value)}
+                    placeholder="Ej. NVIDIA Corporation, Vanguard S&P 500 ETF..."
+                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700/80 rounded-xl text-white text-xs font-medium focus:outline-none focus:border-emerald-500 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    Tipo de Activo
+                  </label>
+                  <select
+                    value={buyAssetType}
+                    onChange={(e) => setBuyAssetType(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700/80 rounded-xl text-white text-xs font-semibold focus:outline-none focus:border-emerald-500 transition"
+                  >
+                    <option value="STOCK">STOCK (Acción)</option>
+                    <option value="ETF">ETF (Fondo)</option>
+                    <option value="FIBRA">FIBRA</option>
+                    <option value="CRYPTO">CRYPTO</option>
+                    <option value="CETES">CETES / Bono</option>
+                  </select>
+                </div>
               </div>
 
               {/* Cantidad y Precio de Compra */}
@@ -1197,7 +1417,7 @@ export default function InvestmentsPage() {
                 </div>
               </div>
 
-              {/* Checkbox para descontar del pool de liquidez */}
+              {/* Checkbox para descontar o ajustar del pool de liquidez */}
               <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-2">
                 <label className="flex items-start gap-2.5 cursor-pointer">
                   <input
@@ -1208,15 +1428,19 @@ export default function InvestmentsPage() {
                   />
                   <div className="text-xs">
                     <span className="font-bold text-white block">
-                      Descontar del saldo líquido disponible del broker
+                      {editingHolding
+                        ? 'Ajustar diferencia de costo en el saldo líquido del broker'
+                        : 'Descontar del saldo líquido disponible del broker'}
                     </span>
                     <span className="text-[11px] text-slate-400">
-                      Resta automáticamente el importe de compra del poder de compra del broker ({selectedBrokerTarget?.name || 'Broker'}).
+                      {editingHolding
+                        ? `Actualiza el efectivo líquido de ${selectedBrokerTarget?.name || 'tu broker'} según la diferencia entre el costo anterior y el nuevo.`
+                        : `Resta automáticamente el importe de compra del poder de compra del broker (${selectedBrokerTarget?.name || 'Broker'}).`}
                     </span>
                   </div>
                 </label>
 
-                {buyDeductFromCash && selectedBrokerTarget && estimatedCost > 0 && (
+                {buyDeductFromCash && selectedBrokerTarget && estimatedCost > 0 && !editingHolding && (
                   <div className="pt-2 border-t border-slate-800/80 text-[11px] flex justify-between text-slate-300">
                     <span>Costo estimado: <strong>{formatCurrency(estimatedCost)} {buyCurrency}</strong></span>
                     <span>Líquido restante: <strong>{formatCurrency((Number(selectedBrokerTarget.currentBalance) || 0) - estimatedCost)}</strong></span>
@@ -1228,22 +1452,25 @@ export default function InvestmentsPage() {
               <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setIsBuyModalOpen(false)}
-                  disabled={createHoldingMutation.isPending}
+                  onClick={() => {
+                    setEditingHolding(null);
+                    setIsBuyModalOpen(false);
+                  }}
+                  disabled={createHoldingMutation.isPending || updateHoldingMutation.isPending}
                   className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  disabled={createHoldingMutation.isPending}
+                  disabled={createHoldingMutation.isPending || updateHoldingMutation.isPending}
                   className="px-5 py-2.5 btn-emerald text-white rounded-xl text-xs font-black transition flex items-center gap-2 shadow-lg disabled:opacity-50"
                 >
-                  {createHoldingMutation.isPending ? (
-                    <span>Registrando posición...</span>
+                  {createHoldingMutation.isPending || updateHoldingMutation.isPending ? (
+                    <span>{editingHolding ? 'Guardando cambios...' : 'Registrando posición...'}</span>
                   ) : (
                     <>
-                      <span>Registrar Compra</span>
+                      <span>{editingHolding ? 'Guardar Cambios' : 'Registrar Compra'}</span>
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}
