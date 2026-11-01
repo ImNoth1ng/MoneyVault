@@ -103,7 +103,7 @@ public class InvestmentService {
                 .build();
 
         InvestmentHolding saved = holdingRepository.save(holding);
-        StockQuoteDTO quote = marketDataService.getQuote(symbol);
+        StockQuoteDTO quote = marketDataService.getQuote(symbol, currency);
         return mapToResponse(saved, quote, usdRate);
     }
 
@@ -118,12 +118,13 @@ public class InvestmentService {
             holdings = holdingRepository.findByUserIdOrderByCreatedAtDesc(userId);
         }
 
-        Set<String> symbols = holdings.stream().map(InvestmentHolding::getSymbol).collect(Collectors.toSet());
-        Map<String, StockQuoteDTO> quotes = marketDataService.getQuotes(symbols);
         BigDecimal usdRate = marketDataService.getUsdToMxnRate();
 
         return holdings.stream()
-                .map(h -> mapToResponse(h, quotes.get(h.getSymbol()), usdRate))
+                .map(h -> {
+                    StockQuoteDTO quote = marketDataService.getQuote(h.getSymbol(), h.getCurrency());
+                    return mapToResponse(h, quote, usdRate);
+                })
                 .collect(Collectors.toList());
     }
 
@@ -203,7 +204,7 @@ public class InvestmentService {
         holding.setNotes(req.getNotes());
 
         InvestmentHolding updated = holdingRepository.save(holding);
-        StockQuoteDTO quote = marketDataService.getQuote(symbol);
+        StockQuoteDTO quote = marketDataService.getQuote(symbol, newCurrency);
         return mapToResponse(updated, quote, usdRate);
     }
 
@@ -256,9 +257,6 @@ public class InvestmentService {
                 .collect(Collectors.toList());
 
         List<InvestmentHolding> allHoldings = holdingRepository.findByUserIdOrderByCreatedAtDesc(userId);
-
-        Set<String> symbols = allHoldings.stream().map(InvestmentHolding::getSymbol).collect(Collectors.toSet());
-        Map<String, StockQuoteDTO> quotes = marketDataService.getQuotes(symbols);
         BigDecimal usdRate = marketDataService.getUsdToMxnRate();
 
         Map<Long, List<InvestmentHolding>> holdingsByAccount = allHoldings.stream()
@@ -274,52 +272,52 @@ public class InvestmentService {
         for (Account broker : brokerAccounts) {
             BigDecimal brokerCash = broker.getCurrentBalance() != null ? broker.getCurrentBalance() : BigDecimal.ZERO;
             BigDecimal brokerCashMxn = "USD".equalsIgnoreCase(broker.getCurrency())
-                    ? brokerCash.multiply(usdRate)
+                    ? brokerCash.multiply(usdRate).setScale(2, RoundingMode.HALF_UP)
                     : brokerCash;
             totalCashAvailableMxn = totalCashAvailableMxn.add(brokerCashMxn);
 
             List<InvestmentHolding> accountHoldings = holdingsByAccount.getOrDefault(broker.getId(), Collections.emptyList());
             List<InvestmentHoldingResponse> holdingResponses = new ArrayList<>();
 
-            BigDecimal brokerInvestedValue = BigDecimal.ZERO;
-            BigDecimal brokerTotalCost = BigDecimal.ZERO;
+            BigDecimal brokerInvestedValueMxn = BigDecimal.ZERO;
+            BigDecimal brokerTotalCostMxn = BigDecimal.ZERO;
 
             for (InvestmentHolding h : accountHoldings) {
-                StockQuoteDTO q = quotes.get(h.getSymbol());
+                StockQuoteDTO q = marketDataService.getQuote(h.getSymbol(), h.getCurrency());
                 InvestmentHoldingResponse resp = mapToResponse(h, q, usdRate);
                 holdingResponses.add(resp);
 
-                BigDecimal investedInAcc = resp.getCurrentValueInAccountCurrency() != null
-                        ? resp.getCurrentValueInAccountCurrency()
+                BigDecimal investedMxn = resp.getCurrentValueMxn() != null
+                        ? resp.getCurrentValueMxn()
                         : resp.getCurrentValue();
-                BigDecimal costInAcc = resp.getTotalInvestedInAccountCurrency() != null
-                        ? resp.getTotalInvestedInAccountCurrency()
+                BigDecimal costMxn = resp.getTotalInvestedMxn() != null
+                        ? resp.getTotalInvestedMxn()
                         : resp.getTotalInvested();
 
-                brokerInvestedValue = brokerInvestedValue.add(investedInAcc);
-                brokerTotalCost = brokerTotalCost.add(costInAcc);
+                brokerInvestedValueMxn = brokerInvestedValueMxn.add(investedMxn);
+                brokerTotalCostMxn = brokerTotalCostMxn.add(costMxn);
 
-                totalAssetsValueMxn = totalAssetsValueMxn.add(investedInAcc);
-                totalCostBasisMxn = totalCostBasisMxn.add(costInAcc);
+                totalAssetsValueMxn = totalAssetsValueMxn.add(investedMxn);
+                totalCostBasisMxn = totalCostBasisMxn.add(costMxn);
 
-                allocationMap.merge(h.getSymbol(), investedInAcc, BigDecimal::add);
+                allocationMap.merge(h.getSymbol(), investedMxn, BigDecimal::add);
             }
 
-            BigDecimal brokerGainLoss = brokerInvestedValue.subtract(brokerTotalCost);
+            BigDecimal brokerGainLoss = brokerInvestedValueMxn.subtract(brokerTotalCostMxn);
             BigDecimal brokerGainLossPercent = BigDecimal.ZERO;
-            if (brokerTotalCost.compareTo(BigDecimal.ZERO) > 0) {
-                brokerGainLossPercent = brokerGainLoss.multiply(BigDecimal.valueOf(100)).divide(brokerTotalCost, 2, RoundingMode.HALF_UP);
+            if (brokerTotalCostMxn.compareTo(BigDecimal.ZERO) > 0) {
+                brokerGainLossPercent = brokerGainLoss.multiply(BigDecimal.valueOf(100)).divide(brokerTotalCostMxn, 2, RoundingMode.HALF_UP);
             }
 
-            BigDecimal brokerTotalPortfolio = brokerCash.add(brokerInvestedValue);
+            BigDecimal brokerTotalPortfolio = brokerCashMxn.add(brokerInvestedValueMxn);
 
             brokerSummaries.add(BrokerSummaryDTO.builder()
                     .accountId(broker.getId())
                     .accountName(broker.getName())
                     .currency(broker.getCurrency())
-                    .cashAvailable(brokerCash)
-                    .investedValue(brokerInvestedValue)
-                    .totalCost(brokerTotalCost)
+                    .cashAvailable(brokerCashMxn)
+                    .investedValue(brokerInvestedValueMxn)
+                    .totalCost(brokerTotalCostMxn)
                     .totalPortfolioValue(brokerTotalPortfolio)
                     .gainLoss(brokerGainLoss)
                     .gainLossPercent(brokerGainLossPercent)
@@ -423,6 +421,15 @@ public class InvestmentService {
         BigDecimal totalInvestedInAcc = totalInvested.multiply(multiplier).setScale(2, RoundingMode.HALF_UP);
         BigDecimal gainLossInAcc = gainLoss.multiply(multiplier).setScale(2, RoundingMode.HALF_UP);
 
+        // Conversión explícita a MXN usando el tipo de cambio actual
+        boolean isUsdHolding = "USD".equalsIgnoreCase(h.getCurrency());
+        BigDecimal mxnMultiplier = isUsdHolding ? usdRate : BigDecimal.ONE;
+        BigDecimal buyPriceMxn = h.getBuyPrice().multiply(mxnMultiplier).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal totalInvestedMxn = totalInvested.multiply(mxnMultiplier).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal currentPriceMxn = currentPrice.multiply(mxnMultiplier).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal currentValueMxn = currentValue.multiply(mxnMultiplier).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal gainLossMxn = gainLoss.multiply(mxnMultiplier).setScale(2, RoundingMode.HALF_UP);
+
         return InvestmentHoldingResponse.builder()
                 .id(h.getId())
                 .accountId(h.getAccount().getId())
@@ -445,6 +452,12 @@ public class InvestmentService {
                 .currentValueInAccountCurrency(currentValueInAcc)
                 .totalInvestedInAccountCurrency(totalInvestedInAcc)
                 .gainLossInAccountCurrency(gainLossInAcc)
+                .usdToMxnRate(usdRate)
+                .buyPriceMxn(buyPriceMxn)
+                .totalInvestedMxn(totalInvestedMxn)
+                .currentPriceMxn(currentPriceMxn)
+                .currentValueMxn(currentValueMxn)
+                .gainLossMxn(gainLossMxn)
                 .isQuoteLive(isLive)
                 .createdAt(h.getCreatedAt())
                 .updatedAt(h.getUpdatedAt())

@@ -140,17 +140,18 @@ export default function InvestmentsPage() {
     }
   };
 
-  // Consultar precio al ingresar ticker
-  const handleLookupTicker = async (symbolToLook: string) => {
+  // Consultar precio al ingresar ticker según la bolsa seleccionada (BMV MXN por defecto o EE.UU. USD)
+  const handleLookupTicker = async (symbolToLook: string, marketOverride?: 'MXN' | 'USD') => {
     const cleanSym = symbolToLook.trim().toUpperCase();
     if (!cleanSym) return;
 
+    const targetMarket = marketOverride || buyCurrency || 'MXN';
     setIsFetchingQuote(true);
     setFetchedLivePrice(null);
     try {
       const client = apiClient.getClient();
       const { data } = await client.get<Record<string, any>>('/investments/quotes', {
-        params: { symbols: cleanSym, refresh: false }
+        params: { symbols: cleanSym, market: targetMarket, refresh: false }
       });
 
       if (data && data[cleanSym]) {
@@ -160,13 +161,10 @@ export default function InvestmentsPage() {
           setFetchedLivePrice(liveP);
           setFetchedQuoteMeta({
             exchangeName: quote.exchangeName,
-            currency: quote.currency
+            currency: quote.currency || targetMarket
           });
           if (!buyName && quote.shortName) {
             setBuyName(quote.shortName);
-          }
-          if (quote.currency) {
-            setBuyCurrency(quote.currency === 'MXN' ? 'MXN' : 'USD');
           }
         }
       }
@@ -177,11 +175,18 @@ export default function InvestmentsPage() {
     }
   };
 
+  const handleSelectMarket = (market: 'MXN' | 'USD') => {
+    setBuyCurrency(market);
+    if (buySymbol.trim()) {
+      handleLookupTicker(buySymbol, market);
+    }
+  };
+
   const handleSelectPopularTicker = (item: { symbol: string; name: string; assetType: string }) => {
     setBuySymbol(item.symbol);
     setBuyName(item.name);
     setBuyAssetType(item.assetType);
-    handleLookupTicker(item.symbol);
+    handleLookupTicker(item.symbol, buyCurrency);
   };
 
   // Manejo de modal para editar dinero líquido del broker
@@ -409,24 +414,33 @@ export default function InvestmentsPage() {
     };
   }, [selectedBroker, portfolioSummary, holdings.length]);
 
-  // Datos para gráfica lineal comparativa (Costo vs Valor Actual por Activo)
+  const usdRate = Number(portfolioSummary?.usdToMxnRate) || 18.5;
+
+  // Datos para gráfica lineal comparativa (Costo vs Valor Actual por Activo en MXN)
   const comparisonLineData = useMemo(() => {
     const items = holdings.slice(0, 10).map((h) => {
-      const invested = Number(h.totalInvestedInAccountCurrency || h.totalInvested) || 0;
-      const current = Number(h.currentValueInAccountCurrency || h.currentValue) || 0;
+      const rate = Number(h.usdToMxnRate || portfolioSummary?.usdToMxnRate) || 18.5;
+      const invested =
+        Number(h.totalInvestedMxn ?? h.totalInvestedInAccountCurrency) ||
+        (h.currency === 'USD' ? Number(h.totalInvested) * rate : Number(h.totalInvested)) ||
+        0;
+      const current =
+        Number(h.currentValueMxn ?? h.currentValueInAccountCurrency) ||
+        (h.currency === 'USD' ? Number(h.currentValue) * rate : Number(h.currentValue)) ||
+        0;
       return {
         symbol: h.symbol,
-        Invertido: invested,
-        'Valor Actual': current
+        Invertido: Number(invested.toFixed(2)),
+        'Valor Actual': Number(current.toFixed(2))
       };
     });
     if (items.length === 1) {
       return [{ symbol: 'Base', Invertido: 0, 'Valor Actual': 0 }, ...items];
     }
     return items;
-  }, [holdings]);
+  }, [holdings, portfolioSummary?.usdToMxnRate]);
 
-  // Datos para gráfica lineal de evolución acumulada del portafolio
+  // Datos para gráfica lineal de evolución acumulada del portafolio en MXN
   const cumulativeLineData = useMemo(() => {
     const sorted = [...holdings].sort((a, b) => {
       const dateA = a.buyDate ? new Date(a.buyDate).getTime() : 0;
@@ -446,8 +460,15 @@ export default function InvestmentsPage() {
     ];
 
     sorted.forEach((h, idx) => {
-      const invested = Number(h.totalInvestedInAccountCurrency || h.totalInvested) || 0;
-      const current = Number(h.currentValueInAccountCurrency || h.currentValue) || 0;
+      const rate = Number(h.usdToMxnRate || portfolioSummary?.usdToMxnRate) || 18.5;
+      const invested =
+        Number(h.totalInvestedMxn ?? h.totalInvestedInAccountCurrency) ||
+        (h.currency === 'USD' ? Number(h.totalInvested) * rate : Number(h.totalInvested)) ||
+        0;
+      const current =
+        Number(h.currentValueMxn ?? h.currentValueInAccountCurrency) ||
+        (h.currency === 'USD' ? Number(h.currentValue) * rate : Number(h.currentValue)) ||
+        0;
       runningInvested += invested;
       runningValue += current;
       points.push({
@@ -458,7 +479,7 @@ export default function InvestmentsPage() {
     });
 
     return points;
-  }, [holdings]);
+  }, [holdings, portfolioSummary?.usdToMxnRate]);
 
   // Datos para gráfico de pastel de asignación
   const allocationPieData = useMemo(() => {
@@ -470,6 +491,13 @@ export default function InvestmentsPage() {
 
   const selectedBrokerTarget = brokerAccounts.find((b) => String(b.id) === String(buyBrokerId));
   const estimatedCost = (parseFloat(buyQuantity) || 0) * (parseFloat(buyPrice) || 0);
+  const estimatedCostMxn = buyCurrency === 'USD' ? estimatedCost * usdRate : estimatedCost;
+  const estimatedCostInBrokerCurrency =
+    selectedBrokerTarget?.currency === 'USD'
+      ? buyCurrency === 'USD'
+        ? estimatedCost
+        : estimatedCost / usdRate
+      : estimatedCostMxn;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
@@ -549,19 +577,19 @@ export default function InvestmentsPage() {
         <div className="glass-card rounded-2xl p-4 sm:p-5 border border-slate-800 flex flex-col justify-between relative overflow-hidden group hover:border-slate-700/80 transition shadow-lg">
           <div className="flex items-center justify-between gap-2 mb-2">
             <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-widest truncate">
-              VALOR TOTAL CARTERA
+              VALOR TOTAL CARTERA (MXN)
             </span>
             <div className="p-2 rounded-xl bg-gradient-to-br from-emerald-500/15 to-cyan-500/15 border border-emerald-500/30 text-emerald-400 flex-shrink-0">
               <TrendingUp className="w-4 h-4 stroke-[2.5]" />
             </div>
           </div>
           <div className="my-1">
-            <p className="text-xl sm:text-2xl font-mono font-black text-white tracking-tight truncate" title={formatCurrency(activeMetrics.totalPortfolio)}>
-              {formatCurrency(activeMetrics.totalPortfolio)}
+            <p className="text-xl sm:text-2xl font-mono font-black text-white tracking-tight truncate" title={`${formatCurrency(activeMetrics.totalPortfolio)} MXN`}>
+              {formatCurrency(activeMetrics.totalPortfolio)} <span className="text-xs font-bold text-slate-400">MXN</span>
             </p>
           </div>
           <div className="pt-2 border-t border-slate-800/80 text-[11px] text-slate-400 font-medium truncate">
-            <span>Líquido + Activos valorizados</span>
+            <span>Líquido + Activos (USD convertido a MXN)</span>
           </div>
         </div>
 
@@ -588,8 +616,8 @@ export default function InvestmentsPage() {
           </div>
 
           <div className="my-1">
-            <p className="text-xl sm:text-2xl font-mono font-black text-cyan-300 tracking-tight truncate" title={formatCurrency(activeMetrics.cashAvailable)}>
-              {formatCurrency(activeMetrics.cashAvailable)}
+            <p className="text-xl sm:text-2xl font-mono font-black text-cyan-300 tracking-tight truncate" title={`${formatCurrency(activeMetrics.cashAvailable)} MXN`}>
+              {formatCurrency(activeMetrics.cashAvailable)} <span className="text-xs font-bold text-cyan-400/70">MXN</span>
             </p>
           </div>
 
@@ -607,19 +635,19 @@ export default function InvestmentsPage() {
         <div className="glass-card rounded-2xl p-4 sm:p-5 border border-slate-800 flex flex-col justify-between relative overflow-hidden group hover:border-slate-700/80 transition shadow-lg">
           <div className="flex items-center justify-between gap-2 mb-2">
             <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-widest truncate">
-              VALOR MERCADO ACTIVOS
+              VALOR MERCADO ACTIVOS (MXN)
             </span>
             <div className="p-2 rounded-xl bg-slate-800 border border-slate-700/80 text-slate-300 flex-shrink-0">
               <Layers className="w-4 h-4 stroke-[2.5]" />
             </div>
           </div>
           <div className="my-1">
-            <p className="text-xl sm:text-2xl font-mono font-black text-slate-100 tracking-tight truncate" title={formatCurrency(activeMetrics.assetsValue)}>
-              {formatCurrency(activeMetrics.assetsValue)}
+            <p className="text-xl sm:text-2xl font-mono font-black text-slate-100 tracking-tight truncate" title={`${formatCurrency(activeMetrics.assetsValue)} MXN`}>
+              {formatCurrency(activeMetrics.assetsValue)} <span className="text-xs font-bold text-slate-400">MXN</span>
             </p>
           </div>
           <div className="pt-2 border-t border-slate-800/80 text-[11px] text-slate-400 font-medium truncate">
-            <span>Costo base: {formatCurrency(activeMetrics.totalCost)}</span>
+            <span>Costo base: {formatCurrency(activeMetrics.totalCost)} MXN</span>
           </div>
         </div>
 
@@ -631,7 +659,7 @@ export default function InvestmentsPage() {
                 activeMetrics.gainLoss >= 0 ? 'text-emerald-400' : 'text-rose-400'
               }`}
             >
-              RENDIMIENTO HISTÓRICO
+              RENDIMIENTO HISTÓRICO (MXN)
             </span>
             <div
               className={`p-2 rounded-xl border flex-shrink-0 ${
@@ -652,10 +680,10 @@ export default function InvestmentsPage() {
               className={`text-xl sm:text-2xl font-mono font-black tracking-tight truncate ${
                 activeMetrics.gainLoss >= 0 ? 'text-emerald-400' : 'text-rose-400'
               }`}
-              title={`${activeMetrics.gainLoss >= 0 ? '+' : ''}${formatCurrency(activeMetrics.gainLoss)}`}
+              title={`${activeMetrics.gainLoss >= 0 ? '+' : ''}${formatCurrency(activeMetrics.gainLoss)} MXN`}
             >
               {activeMetrics.gainLoss >= 0 ? '+' : ''}
-              {formatCurrency(activeMetrics.gainLoss)}
+              {formatCurrency(activeMetrics.gainLoss)} <span className="text-xs font-bold">MXN</span>
             </p>
           </div>
           <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-bold">
@@ -713,7 +741,12 @@ export default function InvestmentsPage() {
                 >
                   <span>{broker.name}</span>
                   <span className="text-[10px] font-mono font-medium text-slate-300 bg-slate-800/90 px-1.5 py-0.5 rounded-md">
-                    Líq: {formatCurrency(Number(broker.currentBalance) || 0)}
+                    Líq: {formatCurrency(Number(broker.currentBalance) || 0)} {broker.currency || 'MXN'}
+                    {broker.currency === 'USD' && (
+                      <span className="text-cyan-300 ml-1">
+                        (≈ {formatCurrency((Number(broker.currentBalance) || 0) * usdRate)} MXN)
+                      </span>
+                    )}
                   </span>
                 </button>
                 <button
@@ -1052,9 +1085,24 @@ export default function InvestmentsPage() {
               </thead>
               <tbody className="divide-y divide-slate-800/60 font-medium">
                 {filteredHoldings.map((h) => {
+                  const isUsd = h.currency === 'USD';
+                  const rate = Number(h.usdToMxnRate || portfolioSummary?.usdToMxnRate) || 18.5;
                   const gainLoss = Number(h.gainLoss) || 0;
                   const isGain = gainLoss >= 0;
                   const dayChange = Number(h.dailyChangePercent) || 0;
+
+                  const buyPriceMxn = Number(h.buyPriceMxn) || (isUsd ? Number(h.buyPrice) * rate : Number(h.buyPrice));
+                  const totalInvestedMxn =
+                    Number(h.totalInvestedMxn ?? h.totalInvestedInAccountCurrency) ||
+                    (isUsd ? Number(h.totalInvested) * rate : Number(h.totalInvested));
+                  const currentPriceMxn =
+                    Number(h.currentPriceMxn) || (isUsd ? Number(h.currentPrice) * rate : Number(h.currentPrice));
+                  const currentValueMxn =
+                    Number(h.currentValueMxn ?? h.currentValueInAccountCurrency) ||
+                    (isUsd ? Number(h.currentValue) * rate : Number(h.currentValue));
+                  const gainLossMxn =
+                    Number(h.gainLossMxn ?? h.gainLossInAccountCurrency) ||
+                    (isUsd ? gainLoss * rate : gainLoss);
 
                   return (
                     <tr key={h.id} className="hover:bg-slate-800/40 transition group">
@@ -1066,10 +1114,19 @@ export default function InvestmentsPage() {
                             {h.symbol.slice(0, 3)}
                           </div>
                           <div>
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-black text-white text-sm">{h.symbol}</span>
                               <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-slate-800 text-slate-300">
                                 {h.assetType || 'STOCK'}
+                              </span>
+                              <span
+                                className={`px-1.5 py-0.2 rounded text-[9px] font-bold border ${
+                                  isUsd
+                                    ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30'
+                                    : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                }`}
+                              >
+                                {isUsd ? 'EE.UU. · USD' : 'BMV · MXN'}
                               </span>
                             </div>
                             <p className="text-[11px] text-slate-400 truncate max-w-xs">{h.name}</p>
@@ -1091,12 +1148,22 @@ export default function InvestmentsPage() {
 
                       {/* Precio de Compra */}
                       <td className="py-3.5 px-4 text-right">
-                        <span className="font-mono text-slate-300 block">
+                        <span className="font-mono text-slate-200 font-bold block">
                           {formatCurrency(Number(h.buyPrice))} {h.currency}
                         </span>
-                        <span className="text-[10px] text-slate-400 block font-semibold">
-                          Total: {formatCurrency(Number(h.totalInvested))}
+                        {isUsd && (
+                          <span className="text-[10px] text-cyan-300/90 font-mono block">
+                            ≈ {formatCurrency(buyPriceMxn)} MXN c/u
+                          </span>
+                        )}
+                        <span className="text-[10px] text-slate-400 block font-semibold mt-0.5">
+                          Total: {formatCurrency(Number(h.totalInvested))} {h.currency}
                         </span>
+                        {isUsd && (
+                          <span className="text-[10px] text-emerald-400/90 font-mono font-bold block">
+                            ≈ {formatCurrency(totalInvestedMxn)} MXN
+                          </span>
+                        )}
                       </td>
 
                       {/* Precio Actual en Bolsa */}
@@ -1104,9 +1171,14 @@ export default function InvestmentsPage() {
                         <span className="font-mono font-extrabold text-white block">
                           {formatCurrency(Number(h.currentPrice))} {h.currency}
                         </span>
+                        {isUsd && (
+                          <span className="text-[10px] text-cyan-300/90 font-mono block">
+                            ≈ {formatCurrency(currentPriceMxn)} MXN
+                          </span>
+                        )}
                         {dayChange !== 0 && (
                           <span
-                            className={`text-[10px] font-bold flex items-center justify-end gap-0.5 ${
+                            className={`text-[10px] font-bold flex items-center justify-end gap-0.5 mt-0.5 ${
                               dayChange >= 0 ? 'text-emerald-400' : 'text-rose-400'
                             }`}
                           >
@@ -1128,9 +1200,9 @@ export default function InvestmentsPage() {
                         <span className="font-mono font-black text-white text-sm block">
                           {formatCurrency(Number(h.currentValue))} {h.currency}
                         </span>
-                        {h.currency === 'USD' && h.currentValueInAccountCurrency && (
-                          <span className="text-[10px] text-slate-400 font-mono block">
-                            ≈ {formatCurrency(Number(h.currentValueInAccountCurrency))} MXN
+                        {isUsd && (
+                          <span className="text-[11px] text-emerald-300 font-mono font-bold block mt-0.5">
+                            ≈ {formatCurrency(currentValueMxn)} MXN
                           </span>
                         )}
                       </td>
@@ -1145,9 +1217,19 @@ export default function InvestmentsPage() {
                           }`}
                         >
                           {isGain ? '+' : ''}
-                          {formatCurrency(gainLoss)} ({isGain ? '+' : ''}
+                          {formatCurrency(gainLoss)} {h.currency} ({isGain ? '+' : ''}
                           {Number(h.gainLossPercent || 0).toFixed(2)}%)
                         </div>
+                        {isUsd && (
+                          <span
+                            className={`text-[10px] font-mono font-bold block mt-1 ${
+                              gainLossMxn >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                            }`}
+                          >
+                            ≈ {gainLossMxn >= 0 ? '+' : ''}
+                            {formatCurrency(gainLossMxn)} MXN
+                          </span>
+                        )}
                       </td>
 
                       {/* Acciones */}
@@ -1163,7 +1245,9 @@ export default function InvestmentsPage() {
                           </button>
 
                           <a
-                            href={`https://finance.yahoo.com/quote/${h.symbol}`}
+                            href={`https://finance.yahoo.com/quote/${
+                              !isUsd && !h.symbol.includes('.') ? `${h.symbol}.MX` : h.symbol
+                            }`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-slate-800 rounded-lg transition"
@@ -1232,6 +1316,58 @@ export default function InvestmentsPage() {
 
             <form onSubmit={handleSubmitBuy} className="space-y-4">
               
+              {/* Selector de Bolsa de Valores (Por defecto: Bolsa Mexicana de Valores BMV/SIC) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Bolsa de Valores / Mercado de Compra *
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectMarket('MXN')}
+                    className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
+                      buyCurrency === 'MXN'
+                        ? 'bg-emerald-500/15 border-emerald-500/50 text-white shadow-lg shadow-emerald-950/30'
+                        : 'bg-slate-900/90 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-black tracking-tight">
+                        Bolsa Mexicana (BMV / SIC)
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        MXN
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 mt-1 block">
+                      Por defecto — Compra y cotización en Pesos Mexicanos
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelectMarket('USD')}
+                    className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
+                      buyCurrency === 'USD'
+                        ? 'bg-cyan-500/15 border-cyan-500/50 text-white shadow-lg shadow-cyan-950/30'
+                        : 'bg-slate-900/90 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-black tracking-tight">
+                        Bolsa de EE.UU. (NYSE / NASDAQ)
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-black bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                        USD
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 mt-1 block">
+                      En Dólares — Convierte a MXN (T.C. ${usdRate.toFixed(2)})
+                    </span>
+                  </button>
+                </div>
+              </div>
+
               {/* Selector de Broker */}
               <div>
                 <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
@@ -1246,7 +1382,7 @@ export default function InvestmentsPage() {
                 >
                   {brokerAccounts.map((b) => (
                     <option key={b.id} value={b.id}>
-                      {b.name} — Líquido disponible: {formatCurrency(Number(b.currentBalance) || 0)}
+                      {b.name} — Líquido disponible: {formatCurrency(Number(b.currentBalance) || 0)} {b.currency || 'MXN'}
                     </option>
                   ))}
                 </select>
@@ -1263,7 +1399,7 @@ export default function InvestmentsPage() {
                     required
                     value={buySymbol}
                     onChange={(e) => setBuySymbol(e.target.value.toUpperCase())}
-                    onBlur={(e) => handleLookupTicker(e.target.value)}
+                    onBlur={(e) => handleLookupTicker(e.target.value, buyCurrency)}
                     placeholder="Ej. NVDA, VOO, AAPL, CETES..."
                     className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700/80 rounded-xl text-white font-mono font-bold text-sm uppercase focus:outline-none focus:border-emerald-500 transition"
                   />
@@ -1293,22 +1429,33 @@ export default function InvestmentsPage() {
                 {fetchedLivePrice !== null && (
                   <div className="mt-2.5 p-3 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 flex items-center justify-between text-xs gap-3">
                     <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-black border border-emerald-500/30 uppercase tracking-wider">
-                          {fetchedQuoteMeta?.exchangeName === 'MEX' ? 'BMV / SIC (Bolsa Mexicana)' : 'Mercado en Vivo'}
+                          {buyCurrency === 'USD'
+                            ? 'Bolsa EE.UU. (NYSE / NASDAQ)'
+                            : fetchedQuoteMeta?.exchangeName === 'MEX'
+                            ? 'BMV / SIC (Bolsa Mexicana)'
+                            : 'Mercado en Vivo'}
                         </span>
                         <span className="text-xs font-mono font-black text-white">
-                          ${fetchedLivePrice.toFixed(2)} {buyCurrency}
+                          {formatCurrency(fetchedLivePrice)} {buyCurrency}
                         </span>
+                        {buyCurrency === 'USD' && (
+                          <span className="text-[11px] font-mono font-bold text-cyan-300">
+                            (≈ {formatCurrency(fetchedLivePrice * usdRate)} MXN)
+                          </span>
+                        )}
                       </div>
                       <span className="text-[10px] text-slate-400 block font-medium">
-                        Cotización de referencia en mercado
+                        {buyCurrency === 'USD'
+                          ? `Cotización en Dólares convertida a T.C. $${usdRate.toFixed(2)} MXN/USD`
+                          : 'Cotización directa en Pesos Mexicanos (MXN)'}
                       </span>
                     </div>
                     <button
                       type="button"
                       onClick={() => setBuyPrice(String(fetchedLivePrice))}
-                      className="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 hover:text-white text-xs font-bold border border-cyan-500/40 transition flex items-center gap-1.5 shadow-sm"
+                      className="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 hover:text-white text-xs font-bold border border-cyan-500/40 transition flex items-center gap-1.5 shadow-sm flex-shrink-0"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>Usar precio</span>
@@ -1369,7 +1516,7 @@ export default function InvestmentsPage() {
 
                 <div>
                   <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Precio Compra Unitario *
+                    Precio Compra Unitario ({buyCurrency}) *
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
@@ -1381,43 +1528,35 @@ export default function InvestmentsPage() {
                       value={buyPrice}
                       onChange={(e) => setBuyPrice(e.target.value)}
                       placeholder="0.00"
-                      className="w-full pl-7 pr-3 py-2.5 bg-slate-900 border border-slate-700/80 rounded-xl text-white font-mono font-bold text-sm focus:outline-none focus:border-emerald-500 transition"
+                      className="w-full pl-7 pr-12 py-2.5 bg-slate-900 border border-slate-700/80 rounded-xl text-white font-mono font-bold text-sm focus:outline-none focus:border-emerald-500 transition"
                     />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono font-black text-slate-400">
+                      {buyCurrency}
+                    </span>
                   </div>
+                  {buyCurrency === 'USD' && parseFloat(buyPrice) > 0 && (
+                    <span className="text-[10px] text-cyan-300 font-mono font-semibold mt-1 block">
+                      ≈ {formatCurrency(parseFloat(buyPrice) * usdRate)} MXN por título
+                    </span>
+                  )}
                 </div>
               </div>
 
-              {/* Moneda y Fecha */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Moneda de cotización
-                  </label>
-                  <select
-                    value={buyCurrency}
-                    onChange={(e) => setBuyCurrency(e.target.value as any)}
-                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700/80 rounded-xl text-white text-xs font-semibold focus:outline-none focus:border-emerald-500 transition"
-                  >
-                    <option value="MXN">MXN ($ Pesos Mexicanos) — BMV/SIC</option>
-                    <option value="USD">USD ($ Dólares)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>Fecha de compra</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={buyDate}
-                    onChange={(e) => setBuyDate(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700/80 rounded-xl text-white text-xs font-medium focus:outline-none focus:border-cyan-500 transition"
-                  />
-                </div>
+              {/* Fecha de compra */}
+              <div>
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Fecha de compra</span>
+                </label>
+                <input
+                  type="date"
+                  value={buyDate}
+                  onChange={(e) => setBuyDate(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700/80 rounded-xl text-white text-xs font-medium focus:outline-none focus:border-cyan-500 transition"
+                />
               </div>
 
-              {/* Checkbox para descontar o ajustar del pool de liquidez */}
+              {/* Checkbox para descontar o ajustar del pool de liquidez y Resumen de Conversión */}
               <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-2">
                 <label className="flex items-start gap-2.5 cursor-pointer">
                   <input
@@ -1440,10 +1579,31 @@ export default function InvestmentsPage() {
                   </div>
                 </label>
 
-                {buyDeductFromCash && selectedBrokerTarget && estimatedCost > 0 && !editingHolding && (
-                  <div className="pt-2 border-t border-slate-800/80 text-[11px] flex justify-between text-slate-300">
-                    <span>Costo estimado: <strong>{formatCurrency(estimatedCost)} {buyCurrency}</strong></span>
-                    <span>Líquido restante: <strong>{formatCurrency((Number(selectedBrokerTarget.currentBalance) || 0) - estimatedCost)}</strong></span>
+                {estimatedCost > 0 && (
+                  <div className="pt-2 border-t border-slate-800/80 text-[11px] space-y-1 text-slate-300">
+                    <div className="flex justify-between">
+                      <span>Costo total de operación:</span>
+                      <strong className="font-mono text-white">
+                        {formatCurrency(estimatedCost)} {buyCurrency}
+                      </strong>
+                    </div>
+                    {buyCurrency === 'USD' && (
+                      <div className="flex justify-between text-cyan-300">
+                        <span>Equivalente en Pesos (T.C. ${usdRate.toFixed(2)}):</span>
+                        <strong className="font-mono">
+                          ≈ {formatCurrency(estimatedCostMxn)} MXN
+                        </strong>
+                      </div>
+                    )}
+                    {buyDeductFromCash && selectedBrokerTarget && !editingHolding && (
+                      <div className="flex justify-between text-emerald-300">
+                        <span>Líquido restante en {selectedBrokerTarget.name}:</span>
+                        <strong className="font-mono">
+                          {formatCurrency((Number(selectedBrokerTarget.currentBalance) || 0) - estimatedCostInBrokerCurrency)}{' '}
+                          {selectedBrokerTarget.currency || 'MXN'}
+                        </strong>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1709,7 +1869,13 @@ export default function InvestmentsPage() {
                 className="mt-0.5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500"
               />
               <span className="text-xs text-slate-300 font-bold">
-                Devolver el importe de compra ({formatCurrency(Number(deleteConfirmHolding.totalInvested))}) al saldo líquido disponible de {deleteConfirmHolding.accountName || 'tu broker'}
+                Devolver el importe de compra ({formatCurrency(Number(deleteConfirmHolding.totalInvested))} {deleteConfirmHolding.currency || 'MXN'}
+                {deleteConfirmHolding.currency === 'USD'
+                  ? ` ≈ ${formatCurrency(
+                      Number(deleteConfirmHolding.totalInvestedMxn) || Number(deleteConfirmHolding.totalInvested) * usdRate
+                    )} MXN`
+                  : ''}
+                ) al saldo líquido disponible de {deleteConfirmHolding.accountName || 'tu broker'}
               </span>
             </label>
 

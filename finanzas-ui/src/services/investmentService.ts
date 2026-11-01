@@ -34,11 +34,12 @@ export const investmentService = {
     return data;
   },
 
-  getQuotes: async (symbols: string[], refresh: boolean = false): Promise<Record<string, StockQuote>> => {
+  getQuotes: async (symbols: string[], refresh: boolean = false, market: 'MXN' | 'USD' = 'MXN'): Promise<Record<string, StockQuote>> => {
     if (!symbols.length) return {};
     const { data } = await client.get<Record<string, StockQuote>>('/investments/quotes', {
       params: {
         symbols: symbols.join(','),
+        market,
         refresh,
       },
     });

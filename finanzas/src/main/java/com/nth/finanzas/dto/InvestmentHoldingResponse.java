@@ -39,6 +39,14 @@ public class InvestmentHoldingResponse {
     private BigDecimal totalInvestedInAccountCurrency;
     private BigDecimal gainLossInAccountCurrency;
 
+    // Explicit conversions to MXN (Pesos Mexicanos) using current USD/MXN rate
+    private BigDecimal usdToMxnRate;
+    private BigDecimal buyPriceMxn;
+    private BigDecimal totalInvestedMxn;
+    private BigDecimal currentPriceMxn;
+    private BigDecimal currentValueMxn;
+    private BigDecimal gainLossMxn;
+
     private boolean isQuoteLive;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

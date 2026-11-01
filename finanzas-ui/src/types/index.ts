@@ -303,6 +303,12 @@ export interface InvestmentHolding {
   currentValueInAccountCurrency?: number;
   totalInvestedInAccountCurrency?: number;
   gainLossInAccountCurrency?: number;
+  usdToMxnRate?: number;
+  buyPriceMxn?: number;
+  totalInvestedMxn?: number;
+  currentPriceMxn?: number;
+  currentValueMxn?: number;
+  gainLossMxn?: number;
   isQuoteLive?: boolean;
   createdAt?: string;
   updatedAt?: string;

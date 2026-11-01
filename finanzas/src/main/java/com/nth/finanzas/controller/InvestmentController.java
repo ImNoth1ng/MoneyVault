@@ -77,9 +77,10 @@ public class InvestmentController {
     }
 
     @GetMapping("/quotes")
-    @Operation(summary = "Obtener cotizaciones de mercado", description = "Consulta precios de bolsa en tiempo real para una lista de símbolos (ej: symbols=NVDA,VOO).")
+    @Operation(summary = "Obtener cotizaciones de mercado", description = "Consulta precios de bolsa en tiempo real para una lista de símbolos (ej: symbols=NVDA,VOO&market=MXN o market=USD).")
     public ResponseEntity<Map<String, StockQuoteDTO>> getQuotes(
             @RequestParam List<String> symbols,
+            @RequestParam(required = false, defaultValue = "MXN") String market,
             @RequestParam(defaultValue = "false") boolean refresh) {
         if (symbols != null && symbols.size() > 30) {
             throw new IllegalArgumentException("No se pueden consultar más de 30 símbolos por solicitud");
@@ -87,7 +88,7 @@ public class InvestmentController {
         if (refresh) {
             marketDataService.clearCache();
         }
-        Map<String, StockQuoteDTO> quotes = marketDataService.getQuotes(symbols);
+        Map<String, StockQuoteDTO> quotes = marketDataService.getQuotes(symbols, market);
         return ResponseEntity.ok(quotes);
     }
 

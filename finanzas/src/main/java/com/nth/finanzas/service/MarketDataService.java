@@ -62,19 +62,39 @@ public class MarketDataService {
      * Obtiene la tasa de cambio USD a MXN actual.
      */
     public BigDecimal getUsdToMxnRate() {
-        StockQuoteDTO usdMxn = getQuote("USDMXN=X");
+        StockQuoteDTO usdMxn = fetchSymbolDirectCached("USDMXN=X");
         if (usdMxn != null && usdMxn.getRegularMarketPrice() != null && usdMxn.getRegularMarketPrice().compareTo(BigDecimal.ZERO) > 0) {
             return usdMxn.getRegularMarketPrice();
         }
         return new BigDecimal("18.50"); // Fallback prudente
     }
 
+    private StockQuoteDTO fetchSymbolDirectCached(String symbol) {
+        CacheEntry entry = quoteCache.get(symbol);
+        if (entry != null && !entry.isExpired()) {
+            return entry.quote;
+        }
+        StockQuoteDTO directQuote = fetchQuoteDirect(symbol, symbol);
+        if (directQuote != null && directQuote.getRegularMarketPrice() != null && directQuote.getRegularMarketPrice().compareTo(BigDecimal.ZERO) > 0) {
+            putInCache(symbol, directQuote);
+            return directQuote;
+        }
+        return entry != null ? entry.quote : null;
+    }
+
     /**
-     * Obtiene cotización en tiempo real para un símbolo o ticker.
-     * Prioriza la Bolsa Mexicana de Valores (BMV/SIC) consultando {symbol}.MX
-     * para cotizaciones directamente en pesos mexicanos (MXN), con fallback al mercado internacional.
+     * Obtiene cotización en tiempo real para un símbolo o ticker (por defecto en la Bolsa Mexicana de Valores BMV/SIC).
      */
     public StockQuoteDTO getQuote(String rawSymbol) {
+        return getQuote(rawSymbol, "MXN");
+    }
+
+    /**
+     * Obtiene cotización en tiempo real para un símbolo indicando el mercado/moneda preferida:
+     * - "MXN" / "MX" (por defecto): Prioriza la Bolsa Mexicana de Valores (BMV/SIC) consultando {symbol}.MX en MXN.
+     * - "USD" / "US": Consulta directamente la Bolsa de Estados Unidos (NYSE/NASDAQ) en USD.
+     */
+    public StockQuoteDTO getQuote(String rawSymbol, String preferredMarketOrCurrency) {
         if (rawSymbol == null || rawSymbol.trim().isEmpty()) {
             return null;
         }
@@ -85,33 +105,48 @@ public class MarketDataService {
             return null;
         }
 
-        // 1. Revisar cache si no ha expirado
-        CacheEntry entry = quoteCache.get(symbol);
+        boolean isUsMarket = "USD".equalsIgnoreCase(preferredMarketOrCurrency)
+                || "US".equalsIgnoreCase(preferredMarketOrCurrency)
+                || "USA".equalsIgnoreCase(preferredMarketOrCurrency);
+
+        String cacheKey = symbol + ":" + (isUsMarket ? "USD" : "MXN");
+
+        // 1. Revisar cache específica por mercado/moneda si no ha expirado
+        CacheEntry entry = quoteCache.get(cacheKey);
         if (entry != null && !entry.isExpired()) {
             return entry.quote;
         }
 
-        // Si el símbolo no contiene punto ni caracteres especiales (ej. NVDA, VOO, WALMEX, AAPL),
-        // consultamos primero la Bolsa Mexicana de Valores (BMV / SIC) agregando .MX
-        if (!symbol.contains(".") && !symbol.contains("=") && !symbol.contains("-")) {
-            String mxSymbol = symbol + ".MX";
-            CacheEntry mxEntry = quoteCache.get(mxSymbol);
-            if (mxEntry != null && !mxEntry.isExpired()) {
-                return mxEntry.quote;
+        if (isUsMarket) {
+            // Mercado de Estados Unidos (NYSE / NASDAQ en USD)
+            String usSymbol = symbol.endsWith(".MX") ? symbol.substring(0, symbol.length() - 3) : symbol;
+            StockQuoteDTO usQuote = fetchQuoteDirect(usSymbol, symbol);
+            if (usQuote != null && usQuote.getRegularMarketPrice() != null && usQuote.getRegularMarketPrice().compareTo(BigDecimal.ZERO) > 0) {
+                putInCache(cacheKey, usQuote);
+                return usQuote;
             }
+        } else {
+            // Por defecto: Bolsa Mexicana de Valores (BMV / SIC) agregando .MX
+            if (!symbol.contains(".") && !symbol.contains("=") && !symbol.contains("-")) {
+                String mxSymbol = symbol + ".MX";
+                CacheEntry mxEntry = quoteCache.get(mxSymbol);
+                if (mxEntry != null && !mxEntry.isExpired()) {
+                    return mxEntry.quote;
+                }
 
-            StockQuoteDTO mxQuote = fetchQuoteDirect(mxSymbol, symbol);
-            if (mxQuote != null && mxQuote.getRegularMarketPrice() != null && mxQuote.getRegularMarketPrice().compareTo(BigDecimal.ZERO) > 0) {
-                putInCache(mxSymbol, mxQuote);
-                putInCache(symbol, mxQuote);
-                return mxQuote;
+                StockQuoteDTO mxQuote = fetchQuoteDirect(mxSymbol, symbol);
+                if (mxQuote != null && mxQuote.getRegularMarketPrice() != null && mxQuote.getRegularMarketPrice().compareTo(BigDecimal.ZERO) > 0) {
+                    putInCache(mxSymbol, mxQuote);
+                    putInCache(cacheKey, mxQuote);
+                    return mxQuote;
+                }
             }
         }
 
-        // 2. Consultar símbolo directo (ej. si ya tiene .MX, o es un ticker internacional o cripto)
+        // 2. Consultar símbolo directo como respaldo
         StockQuoteDTO directQuote = fetchQuoteDirect(symbol, symbol);
         if (directQuote != null && directQuote.getRegularMarketPrice() != null && directQuote.getRegularMarketPrice().compareTo(BigDecimal.ZERO) > 0) {
-            putInCache(symbol, directQuote);
+            putInCache(cacheKey, directQuote);
             return directQuote;
         }
 
@@ -130,8 +165,8 @@ public class MarketDataService {
                 .previousClose(BigDecimal.ZERO)
                 .change(BigDecimal.ZERO)
                 .changePercent(BigDecimal.ZERO)
-                .currency("MXN")
-                .exchangeName("MEX")
+                .currency(isUsMarket ? "USD" : "MXN")
+                .exchangeName(isUsMarket ? "NMS" : "MEX")
                 .isLive(false)
                 .fetchedAt(LocalDateTime.now())
                 .sparkline(Collections.emptyList())
@@ -164,16 +199,23 @@ public class MarketDataService {
     }
 
     /**
-     * Obtiene múltiples cotizaciones a la vez.
+     * Obtiene múltiples cotizaciones a la vez (por defecto en BMV / MXN).
      */
     public Map<String, StockQuoteDTO> getQuotes(Collection<String> symbols) {
+        return getQuotes(symbols, "MXN");
+    }
+
+    /**
+     * Obtiene múltiples cotizaciones a la vez para el mercado/moneda indicado ("MXN" o "USD").
+     */
+    public Map<String, StockQuoteDTO> getQuotes(Collection<String> symbols, String preferredMarketOrCurrency) {
         Map<String, StockQuoteDTO> results = new HashMap<>();
         if (symbols == null) return results;
 
         for (String sym : symbols) {
             if (sym != null && !sym.isBlank()) {
                 String normalized = sym.trim().toUpperCase();
-                StockQuoteDTO quote = getQuote(normalized);
+                StockQuoteDTO quote = getQuote(normalized, preferredMarketOrCurrency);
                 if (quote != null) {
                     results.put(normalized, quote);
                 }
