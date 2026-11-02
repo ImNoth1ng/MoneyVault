@@ -430,6 +430,17 @@ public class InvestmentService {
         BigDecimal currentValueMxn = currentValue.multiply(mxnMultiplier).setScale(2, RoundingMode.HALF_UP);
         BigDecimal gainLossMxn = gainLoss.multiply(mxnMultiplier).setScale(2, RoundingMode.HALF_UP);
 
+        List<BigDecimal> sparklineMxn = new ArrayList<>();
+        if (quote != null && quote.getSparkline() != null && !quote.getSparkline().isEmpty()) {
+            boolean quoteIsUsd = "USD".equalsIgnoreCase(quote.getCurrency());
+            BigDecimal quoteToMxn = quoteIsUsd ? usdRate : BigDecimal.ONE;
+            for (BigDecimal sp : quote.getSparkline()) {
+                if (sp != null) {
+                    sparklineMxn.add(sp.multiply(h.getQuantity()).multiply(quoteToMxn).setScale(2, RoundingMode.HALF_UP));
+                }
+            }
+        }
+
         return InvestmentHoldingResponse.builder()
                 .id(h.getId())
                 .accountId(h.getAccount().getId())
@@ -458,6 +469,7 @@ public class InvestmentService {
                 .currentPriceMxn(currentPriceMxn)
                 .currentValueMxn(currentValueMxn)
                 .gainLossMxn(gainLossMxn)
+                .sparklineMxn(sparklineMxn)
                 .isQuoteLive(isLive)
                 .createdAt(h.getCreatedAt())
                 .updatedAt(h.getUpdatedAt())

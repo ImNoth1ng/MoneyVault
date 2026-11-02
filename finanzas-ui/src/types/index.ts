@@ -309,6 +309,7 @@ export interface InvestmentHolding {
   currentPriceMxn?: number;
   currentValueMxn?: number;
   gainLossMxn?: number;
+  sparklineMxn?: number[];
   isQuoteLive?: boolean;
   createdAt?: string;
   updatedAt?: string;

@@ -4,6 +4,7 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Setter
@@ -46,6 +47,7 @@ public class InvestmentHoldingResponse {
     private BigDecimal currentPriceMxn;
     private BigDecimal currentValueMxn;
     private BigDecimal gainLossMxn;
+    private List<BigDecimal> sparklineMxn;
 
     private boolean isQuoteLive;
     private LocalDateTime createdAt;

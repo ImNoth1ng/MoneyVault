@@ -416,70 +416,139 @@ export default function InvestmentsPage() {
 
   const usdRate = Number(portfolioSummary?.usdToMxnRate) || 18.5;
 
-  // Datos para gráfica lineal comparativa (Costo vs Valor Actual por Activo en MXN)
-  const comparisonLineData = useMemo(() => {
-    const items = holdings.slice(0, 10).map((h) => {
+  // Totales base de las posiciones filtradas / activas en MXN
+  const portfolioBaseMxn = useMemo(() => {
+    let totalInvested = 0;
+    let totalCurrent = 0;
+    holdings.forEach((h) => {
       const rate = Number(h.usdToMxnRate || portfolioSummary?.usdToMxnRate) || 18.5;
-      const invested =
+      const inv =
         Number(h.totalInvestedMxn ?? h.totalInvestedInAccountCurrency) ||
         (h.currency === 'USD' ? Number(h.totalInvested) * rate : Number(h.totalInvested)) ||
         0;
-      const current =
+      const cur =
         Number(h.currentValueMxn ?? h.currentValueInAccountCurrency) ||
         (h.currency === 'USD' ? Number(h.currentValue) * rate : Number(h.currentValue)) ||
         0;
-      return {
-        symbol: h.symbol,
-        Invertido: Number(invested.toFixed(2)),
-        'Valor Actual': Number(current.toFixed(2))
-      };
+      totalInvested += inv;
+      totalCurrent += cur;
     });
-    if (items.length === 1) {
-      return [{ symbol: 'Base', Invertido: 0, 'Valor Actual': 0 }, ...items];
-    }
-    return items;
+    return {
+      totalInvested: Number(totalInvested.toFixed(2)),
+      totalCurrent: Number(totalCurrent.toFixed(2))
+    };
   }, [holdings, portfolioSummary?.usdToMxnRate]);
 
-  // Datos para gráfica lineal de evolución acumulada del portafolio en MXN
-  const cumulativeLineData = useMemo(() => {
-    const sorted = [...holdings].sort((a, b) => {
-      const dateA = a.buyDate ? new Date(a.buyDate).getTime() : 0;
-      const dateB = b.buyDate ? new Date(b.buyDate).getTime() : 0;
-      return dateA - dateB;
+  // Gráfico 1: Evolución histórica día a día de tu dinero en las últimas sesiones de bolsa (en MXN)
+  const historicalMoneyData = useMemo(() => {
+    const { totalInvested, totalCurrent } = portfolioBaseMxn;
+    if (holdings.length === 0) return [];
+
+    // Encontrar la longitud máxima de sparkline disponible (hasta 15-20 sesiones)
+    const maxLen = Math.max(
+      0,
+      ...holdings.map((h) => (Array.isArray(h.sparklineMxn) ? h.sparklineMxn.length : 0))
+    );
+
+    const points: { label: string; 'Mi Dinero': number; ganancia: number; pct: number }[] = [];
+
+    // Punto inicial: Compra Base
+    points.push({
+      label: 'Compra',
+      'Mi Dinero': totalInvested,
+      ganancia: 0,
+      pct: 0
     });
 
-    let runningInvested = 0;
-    let runningValue = 0;
+    if (maxLen >= 3) {
+      const stepCount = Math.min(maxLen, 12);
+      const startOffset = maxLen - stepCount;
+      for (let i = startOffset; i < maxLen; i++) {
+        let daySumMxn = 0;
+        holdings.forEach((h) => {
+          const rate = Number(h.usdToMxnRate || portfolioSummary?.usdToMxnRate) || 18.5;
+          const curVal =
+            Number(h.currentValueMxn ?? h.currentValueInAccountCurrency) ||
+            (h.currency === 'USD' ? Number(h.currentValue) * rate : Number(h.currentValue)) ||
+            0;
+          if (Array.isArray(h.sparklineMxn) && h.sparklineMxn.length > 0) {
+            const idx = Math.min(i, h.sparklineMxn.length - 1);
+            daySumMxn += Number(h.sparklineMxn[idx]) || curVal;
+          } else {
+            daySumMxn += curVal;
+          }
+        });
 
-    const points = [
-      {
-        label: 'Inicio',
-        Invertido: 0,
-        'Valor Actual': 0
+        const isLast = i === maxLen - 1;
+        const val = isLast ? totalCurrent : Number(daySumMxn.toFixed(2));
+        const gain = Number((val - totalInvested).toFixed(2));
+        const pct = totalInvested > 0 ? Number(((gain / totalInvested) * 100).toFixed(2)) : 0;
+        const daysAgo = maxLen - 1 - i;
+
+        points.push({
+          label: isLast ? 'Hoy' : `-${daysAgo}d`,
+          'Mi Dinero': val,
+          ganancia: gain,
+          pct
+        });
       }
-    ];
-
-    sorted.forEach((h, idx) => {
-      const rate = Number(h.usdToMxnRate || portfolioSummary?.usdToMxnRate) || 18.5;
-      const invested =
-        Number(h.totalInvestedMxn ?? h.totalInvestedInAccountCurrency) ||
-        (h.currency === 'USD' ? Number(h.totalInvested) * rate : Number(h.totalInvested)) ||
-        0;
-      const current =
-        Number(h.currentValueMxn ?? h.currentValueInAccountCurrency) ||
-        (h.currency === 'USD' ? Number(h.currentValue) * rate : Number(h.currentValue)) ||
-        0;
-      runningInvested += invested;
-      runningValue += current;
-      points.push({
-        label: sorted.length > 1 && sorted.filter((x) => x.symbol === h.symbol).length > 1 ? `${h.symbol} #${idx + 1}` : h.symbol,
-        Invertido: Number(runningInvested.toFixed(2)),
-        'Valor Actual': Number(runningValue.toFixed(2))
-      });
-    });
+    } else {
+      // Interpolación suave desde Compra hasta Hoy si aún no hay historial diario en caché
+      const steps = 6;
+      for (let s = 1; s <= steps; s++) {
+        const ratio = s / steps;
+        const curvedRatio = Math.pow(ratio, 0.85);
+        const val = Number((totalInvested + (totalCurrent - totalInvested) * curvedRatio).toFixed(2));
+        const gain = Number((val - totalInvested).toFixed(2));
+        const pct = totalInvested > 0 ? Number(((gain / totalInvested) * 100).toFixed(2)) : 0;
+        points.push({
+          label: s === steps ? 'Hoy' : `Sem ${s}`,
+          'Mi Dinero': val,
+          ganancia: gain,
+          pct
+        });
+      }
+    }
 
     return points;
-  }, [holdings, portfolioSummary?.usdToMxnRate]);
+  }, [holdings, portfolioBaseMxn, portfolioSummary?.usdToMxnRate]);
+
+  // Gráfico 2: Crecimiento aproximado de tu dinero (Desde Compra -> Hoy -> Proyección a 1 Año en MXN)
+  const moneyGrowthProjectionData = useMemo(() => {
+    const { totalInvested, totalCurrent } = portfolioBaseMxn;
+    if (holdings.length === 0) return [];
+
+    // Calcular tasa anual estimada combinando el rendimiento actual con el crecimiento promedio bursátil (~15% anual)
+    const currentRoi = totalInvested > 0 ? (totalCurrent - totalInvested) / totalInvested : 0;
+    const estimatedAnnualRate = Math.min(0.35, Math.max(0.12, currentRoi > 0.02 ? currentRoi * 2.2 : 0.15));
+    const monthlyRate = Math.pow(1 + estimatedAnnualRate, 1 / 12) - 1;
+
+    const makePoint = (label: string, stage: string, amount: number) => {
+      const rounded = Number(amount.toFixed(2));
+      const gain = Number((rounded - totalInvested).toFixed(2));
+      const pct = totalInvested > 0 ? Number(((gain / totalInvested) * 100).toFixed(2)) : 0;
+      return {
+        label,
+        stage,
+        'Mi Dinero': rounded,
+        ganancia: gain,
+        pct
+      };
+    };
+
+    const midPast = totalInvested + (totalCurrent - totalInvested) * 0.5;
+
+    return [
+      makePoint('Compra', 'Capital Inicial Invertido', totalInvested),
+      makePoint(' Evolución', 'Evolución Reciente', midPast),
+      makePoint('Hoy', 'Valor Actual en Bolsa', totalCurrent),
+      makePoint('+1 Mes', 'Crecimiento Est. (1 Mes)', totalCurrent * Math.pow(1 + monthlyRate, 1)),
+      makePoint('+3 Meses', 'Crecimiento Est. (3 Meses)', totalCurrent * Math.pow(1 + monthlyRate, 3)),
+      makePoint('+6 Meses', 'Crecimiento Est. (6 Meses)', totalCurrent * Math.pow(1 + monthlyRate, 6)),
+      makePoint('+9 Meses', 'Crecimiento Est. (9 Meses)', totalCurrent * Math.pow(1 + monthlyRate, 9)),
+      makePoint('+1 Año', 'Crecimiento Est. (12 Meses)', totalCurrent * Math.pow(1 + monthlyRate, 12))
+    ];
+  }, [holdings.length, portfolioBaseMxn]);
 
   // Datos para gráfico de pastel de asignación
   const allocationPieData = useMemo(() => {
@@ -796,11 +865,11 @@ export default function InvestmentsPage() {
         </div>
       </div>
 
-      {/* SECCIÓN DE GRÁFICAS LINEALES INTERACTIVAS (EVOLUCIÓN Y RENDIMIENTO) */}
+      {/* SECCIÓN DE GRÁFICAS LINEALES DE CRECIMIENTO DE TU DINERO */}
       {holdings.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
-          {/* Gráfico 1: Evolución Acumulada de Cartera (LineChart) con opción de ver Distribución */}
+          {/* Gráfico 1: Evolución Histórica de tu Dinero (Últimas Sesiones) con opción de ver Distribución */}
           <div className="glass-card rounded-3xl p-5 border border-slate-800 space-y-4">
             <div className="flex items-center justify-between gap-2">
               <div>
@@ -811,12 +880,12 @@ export default function InvestmentsPage() {
                     <PieChart className="w-4 h-4 text-emerald-400" />
                   )}
                   <span>
-                    {leftChartMode === 'LINE' ? 'Evolución Acumulada de Cartera' : 'Distribución de Cartera'}
+                    {leftChartMode === 'LINE' ? 'Evolución Reciente de tu Dinero' : 'Distribución de Cartera'}
                   </span>
                 </h3>
                 <p className="text-[11px] text-slate-400 font-medium">
                   {leftChartMode === 'LINE'
-                    ? 'Trayectoria lineal de capital invertido vs. valor actual acumulado'
+                    ? 'Cómo se ha movido y crecido tu dinero en las últimas sesiones de bolsa (MXN)'
                     : 'Porcentaje por activo y efectivo disponible'}
                 </p>
               </div>
@@ -832,7 +901,7 @@ export default function InvestmentsPage() {
                   }`}
                 >
                   <Activity className="w-3 h-3" />
-                  <span>Lineal</span>
+                  <span>Evolución</span>
                 </button>
                 <button
                   type="button"
@@ -852,24 +921,46 @@ export default function InvestmentsPage() {
             <div className="h-64 w-full">
               {leftChartMode === 'LINE' ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={cumulativeLineData} margin={{ top: 10, right: 15, left: -15, bottom: 0 }}>
+                  <LineChart data={historicalMoneyData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                     <XAxis dataKey="label" stroke="#64748b" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                    <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v) => `$${v}`} />
+                    <YAxis
+                      stroke="#64748b"
+                      tick={{ fontSize: 10, fill: '#94a3b8' }}
+                      domain={[
+                        (dataMin: number) => Math.max(0, Math.floor(dataMin * 0.96)),
+                        (dataMax: number) => Math.ceil(dataMax * 1.04)
+                      ]}
+                      tickFormatter={(v) => `$${Number(v).toLocaleString()}`}
+                    />
                     <Tooltip
                       content={({ active, payload, label }) => {
                         if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          const isPositive = Number(data.ganancia) >= 0;
                           return (
-                            <div className="bg-[#0f172a] border border-slate-700/80 rounded-xl p-3 shadow-2xl text-xs space-y-1">
-                              <p className="font-extrabold text-white mb-1">{label}</p>
-                              {payload.map((p: any) => (
-                                <p key={p.name} className="flex justify-between gap-3 text-[11px]">
-                                  <span className="text-slate-400">{p.name}:</span>
-                                  <span className={`font-mono font-bold ${p.name === 'Valor Actual' ? 'text-emerald-400' : 'text-cyan-300'}`}>
-                                    {formatCurrency(Number(p.value))}
-                                  </span>
-                                </p>
-                              ))}
+                            <div className="bg-[#0f172a] border border-slate-700/80 rounded-xl p-3 shadow-2xl text-xs space-y-1.5">
+                              <p className="font-extrabold text-white border-b border-slate-800 pb-1">
+                                Sesión: {label}
+                              </p>
+                              <p className="flex justify-between gap-4 text-[11px]">
+                                <span className="text-slate-400">Tu Dinero Total:</span>
+                                <span className="font-mono font-black text-white">
+                                  {formatCurrency(Number(data['Mi Dinero']))} MXN
+                                </span>
+                              </p>
+                              <p className="flex justify-between gap-4 text-[11px]">
+                                <span className="text-slate-400">Crecimiento vs. Compra:</span>
+                                <span
+                                  className={`font-mono font-bold ${
+                                    isPositive ? 'text-emerald-400' : 'text-rose-400'
+                                  }`}
+                                >
+                                  {isPositive ? '+' : ''}
+                                  {formatCurrency(Number(data.ganancia))} ({isPositive ? '+' : ''}
+                                  {Number(data.pct).toFixed(2)}%)
+                                </span>
+                              </p>
                             </div>
                           );
                         }
@@ -879,19 +970,12 @@ export default function InvestmentsPage() {
                     <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
                     <Line
                       type="monotone"
-                      dataKey="Invertido"
-                      stroke="#06b6d4"
-                      strokeWidth={2.5}
-                      dot={{ r: 4, fill: '#06b6d4', strokeWidth: 2, stroke: '#0f172a' }}
-                      activeDot={{ r: 6 }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="Valor Actual"
+                      dataKey="Mi Dinero"
+                      name="Tu Dinero (MXN)"
                       stroke="#10b981"
                       strokeWidth={3}
-                      dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#0f172a' }}
-                      activeDot={{ r: 6 }}
+                      dot={{ r: 3.5, fill: '#10b981', strokeWidth: 2, stroke: '#0f172a' }}
+                      activeDot={{ r: 6, fill: '#10b981', stroke: '#ffffff', strokeWidth: 2 }}
                     />
                   </LineChart>
                 </ResponsiveContainer>
@@ -948,38 +1032,67 @@ export default function InvestmentsPage() {
             </div>
           </div>
 
-          {/* Gráfico 2: Costo vs Valor Actual por Activo (Gráfica Lineal) */}
+          {/* Gráfico 2: Crecimiento Aproximado de tu Dinero (Trayectoria y Proyección a 1 Año) */}
           <div className="glass-card rounded-3xl p-5 border border-slate-800 space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <div>
                 <h3 className="text-sm font-black text-white tracking-tight flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-cyan-400" />
-                  <span>Costo vs. Valor Actual (Lineal)</span>
+                  <span>Crecimiento Aproximado de tu Dinero</span>
                 </h3>
-                <p className="text-[11px] text-slate-400 font-medium">Comparativa lineal de costo de adquisición contra cotización de mercado</p>
+                <p className="text-[11px] text-slate-400 font-medium">
+                  Cómo va creciendo tu inversión desde tu compra hacia los próximos 12 meses (MXN)
+                </p>
               </div>
+              {moneyGrowthProjectionData.length > 0 && (
+                <div className="px-2.5 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-mono font-black flex-shrink-0">
+                  Est. 1A: {formatCurrency(moneyGrowthProjectionData[moneyGrowthProjectionData.length - 1]['Mi Dinero'])} MXN
+                </div>
+              )}
             </div>
 
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={comparisonLineData} margin={{ top: 10, right: 15, left: -15, bottom: 0 }}>
+                <LineChart data={moneyGrowthProjectionData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                  <XAxis dataKey="symbol" stroke="#64748b" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                  <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v) => `$${v}`} />
+                  <XAxis dataKey="label" stroke="#64748b" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                  <YAxis
+                    stroke="#64748b"
+                    tick={{ fontSize: 10, fill: '#94a3b8' }}
+                    domain={[
+                      (dataMin: number) => Math.max(0, Math.floor(dataMin * 0.96)),
+                      (dataMax: number) => Math.ceil(dataMax * 1.04)
+                    ]}
+                    tickFormatter={(v) => `$${Number(v).toLocaleString()}`}
+                  />
                   <Tooltip
-                    content={({ active, payload, label }) => {
+                    content={({ active, payload }) => {
                       if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        const isPositive = Number(data.ganancia) >= 0;
                         return (
-                          <div className="bg-[#0f172a] border border-slate-700/80 rounded-xl p-3 shadow-2xl text-xs space-y-1">
-                            <p className="font-extrabold text-white mb-1">{label}</p>
-                            {payload.map((p: any) => (
-                              <p key={p.name} className="flex justify-between gap-3 text-[11px]">
-                                <span className="text-slate-400">{p.name}:</span>
-                                <span className={`font-mono font-bold ${p.name === 'Valor Actual' ? 'text-emerald-400' : 'text-cyan-300'}`}>
-                                  {formatCurrency(Number(p.value))}
-                                </span>
-                              </p>
-                            ))}
+                          <div className="bg-[#0f172a] border border-slate-700/80 rounded-xl p-3 shadow-2xl text-xs space-y-1.5">
+                            <p className="font-extrabold text-white border-b border-slate-800 pb-1">
+                              {data.stage || data.label}
+                            </p>
+                            <p className="flex justify-between gap-4 text-[11px]">
+                              <span className="text-slate-400">Tu Dinero (MXN):</span>
+                              <span className="font-mono font-black text-cyan-300">
+                                {formatCurrency(Number(data['Mi Dinero']))} MXN
+                              </span>
+                            </p>
+                            <p className="flex justify-between gap-4 text-[11px]">
+                              <span className="text-slate-400">Ganancia Acumulada:</span>
+                              <span
+                                className={`font-mono font-bold ${
+                                  isPositive ? 'text-emerald-400' : 'text-rose-400'
+                                }`}
+                              >
+                                {isPositive ? '+' : ''}
+                                {formatCurrency(Number(data.ganancia))} ({isPositive ? '+' : ''}
+                                {Number(data.pct).toFixed(2)}%)
+                              </span>
+                            </p>
                           </div>
                         );
                       }
@@ -989,28 +1102,26 @@ export default function InvestmentsPage() {
                   <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
                   <Line
                     type="monotone"
-                    dataKey="Invertido"
+                    dataKey="Mi Dinero"
+                    name="Crecimiento de tu Dinero (MXN)"
                     stroke="#06b6d4"
-                    strokeWidth={2.5}
-                    strokeDasharray="5 5"
-                    dot={{ r: 4, fill: '#06b6d4', strokeWidth: 2, stroke: '#0f172a' }}
-                    activeDot={{ r: 6 }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="Valor Actual"
-                    stroke="#10b981"
                     strokeWidth={3}
-                    dot={{ r: 4.5, fill: '#10b981', strokeWidth: 2, stroke: '#0f172a' }}
-                    activeDot={{ r: 6.5 }}
+                    dot={{ r: 4, fill: '#06b6d4', strokeWidth: 2, stroke: '#0f172a' }}
+                    activeDot={{ r: 6.5, fill: '#10b981', stroke: '#ffffff', strokeWidth: 2 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
             </div>
 
-            <div className="text-[10px] text-slate-400 flex items-center gap-1.5 pt-2 border-t border-slate-800/80 font-medium">
-              <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Cifras convertidas a moneda local para comparación homogénea</span>
+            <div className="text-[10px] text-slate-300 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80 font-medium">
+              <div className="flex items-center gap-1.5 text-slate-400">
+                <ShieldCheck className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+                <span>Iniciaste con <strong className="font-mono text-white">{formatCurrency(portfolioBaseMxn.totalInvested)} MXN</strong></span>
+              </div>
+              <div className="font-mono text-[10px]">
+                <span className="text-slate-400">Hoy: </span>
+                <strong className="text-emerald-400">{formatCurrency(portfolioBaseMxn.totalCurrent)} MXN</strong>
+              </div>
             </div>
           </div>
         </div>
